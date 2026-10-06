@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+.pytest_cache/
+.env
+
+# Session files and sensitive storage
+*.session
+*.session-journal
+storage/source_sessions/*
+storage/target_sessions/*
+!storage/source_sessions/.gitkeep
+!storage/target_sessions/.gitkeep
