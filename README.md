@@ -1,0 +1,150 @@
+# 🚀 Telegram Session Creator & Migration System
+
+سیستم خودکار مدیریت و مهاجرت سشن‌های تلگرام بر پایه کتابخانه **Telethon** و فریم‌ورک **FastAPI** با معماری تمیز (Clean Architecture) و دیزاین پترن‌های استاندارد.
+
+این پروژه برای حل مشکل منقضی یا بن شدن سشن‌ها هنگام جابجایی بین سرورها/آی‌پی‌های مختلف طراحی شده است.
+
+---
+
+## 🏗 معماری سیستم (System Architecture) & Design Patterns
+
+این پروژه بر اساس تفکیک وظایف (Separation of Concerns) و الگوهای طراحی زیر پیاده‌سازی شده است:
+
+1. **معماری Master-Worker (Client-Server):**
+   * **Master (OTP Server):** سشن‌های خریداری شده و موجود در دایرکتوری `storage/source_sessions` را لود کرده و به پیام‌های چت رسمی تلگرام (`777000`) دسترسی دارد. از طریق REST API کد تایید را در اختیار کلاینت‌های دیگر قرار می‌دهد.
+   * **Worker (Session Creator):** روی سرور یا سیستم جدید اجرا شده و با آی‌پی جدید فرآیند درخواست کد (`send_code_request`) را به تلگرام ارسال کرده و سپس کد را از طریق API سرور Master دریافت و ورود را نهایی می‌کند. سشن‌های جدید در `storage/target_sessions` ذخیره می‌شوند.
+
+2. **الگوهای طراحی استفاده‌شده (Design Patterns):**
+   * **Factory Pattern (`core/device_profiler.py`):** ایجاد مشخصات دستگاهی استاندارد و واقع‌گرایانه (Device Model, OS, App Version) به صورت Deterministic بر اساس شماره تا از تغییر نامتعارف فینگرپرینت جلوگیری شود.
+   * **Object Pool / Repository Pattern (`server/session_pool.py`):** مدیریت چرخه حیات کلاینت‌های تلگرام، اتصال، نگه‌داری و بستن امن سشن‌ها.
+   * **Strategy / Polling Client (`worker/otp_client.py`):** استراتژی بازخوانی خودکار کد با قابلیت Retry و Polling و هندلینگ Timeout.
+   * **Service Layer (`server/otp_service.py` & `worker/session_creator.py`):** جداسازی کامل بیزینس لاجیک از لایه وب و رابط خط فرمان (CLI).
+
+---
+
+## 📁 ساختار پروژه (Directory Structure)
+
+```
+session_creator/
+├── config/                  # تنظیمات و متغیرهای محیطی با pydantic-settings
+│   ├── settings.py
+│   └── __init__.py
+├── core/                    # هسته مشترک، اینترفیس‌ها، خطاها و کارخانه پروفایل دستگاه
+│   ├── constants.py
+│   ├── device_profiler.py   # Factory تولید مشخصات دستگاهی
+│   ├── exceptions.py        # خطاهای سفارشی پروژه
+│   ├── interfaces.py        # Abstract Base Classes
+│   └── __init__.py
+├── server/                  # سرویس Master (FastAPI + Web Admin Panel)
+│   ├── main.py              # اندپوینت‌های REST API و پنل وب
+│   ├── session_pool.py      # مدیریت پول سشن‌های مبدأ Telethon
+│   ├── otp_service.py       # استخراج کد پیام رسمی 777000
+│   ├── migration_manager.py # مدیریت جاب‌های مهاجرت در پس‌زمینه
+│   ├── templates/
+│   │   └── index.html       # داشبورد مدیریت وب مدرن و ریسپانسیو
+│   └── __init__.py
+├── worker/                  # سرویس ساخت سشن در سرور مقصد
+│   ├── otp_client.py        # پولینگ API سرور Master
+│   ├── session_creator.py   # لاگین Telethon و ساخت سشن جدید
+│   └── __init__.py
+├── cli/                     # اسکریپت‌های اجرایی با پارامترهای خط فرمان
+│   ├── run_server.py
+│   └── run_worker.py
+├── storage/
+│   ├── source_sessions/     # سشن‌های اولیه خریداری شده (.session)
+│   └── target_sessions/     # سشن‌های جدید تولید شده (.session)
+├── tests/                   # تست‌های واحد (Unit Tests)
+├── requirements.txt
+├── .env.example
+├── run_server.py            # میانبر اجرای وب سرور Master
+└── run_worker.py            # میانبر اجرای ساخت سشن Worker
+```
+
+---
+
+## ⚙️ راهنمای راه‌اندازی و کانفیگ (Setup)
+
+### ۱. نصب نیازمندی‌ها
+```bash
+pip install -r requirements.txt
+```
+
+### ۲. ساخت فایل `.env`
+یک کپی از `.env.example` با نام `.env` بسازید و مقادیر خود را وارد کنید:
+```env
+API_ID=12345678
+API_HASH=your_api_hash_here
+
+SERVER_HOST=0.0.0.0
+SERVER_PORT=8000
+SERVER_URL=http://127.0.0.1:8000
+```
+
+---
+
+## 🚀 راهنمای اجرا
+
+### گام اول: اجرای سرور مبدأ (Master OTP Server)
+
+1. سشن‌های تلگرام اولیه‌ای که خریداری کرده‌اید را درون پوشه `storage/source_sessions/` کپی کنید (فایل‌های با پسوند `.session`).
+2. سرور را اجرا کنید:
+```bash
+python run_server.py
+```
+* سرور وب روی آدرس `http://localhost:8000` بالا می‌آید.
+* **داشبورد گرافیکی پنل ادمین (Web Dashboard):** با مراجعه به آدرس `http://localhost:8000` در مرورگر، پنل مدیریت گرافیکی کامل در دسترس است با امکانات:
+  - 📊 مشاهده آمار سشن‌های مبدأ و مقصد
+  - 📋 جدول سشن‌ها همراه با وضعیت لاگین، مدل گوشی و شماره
+  - 📤 درگ اند دراپ و آپلود فایل‌های `.session`
+  - 🔑 دریافت کد زنده تلگرام با دکمه کپی
+  - ⚡ شروع ساخت سشن (تکی یا گروهی) مستقیم از پنل وب
+  - 💾 دانلود فایل‌های سشن مقصد (تکی یا فایل ZIP تجمیعی)
+  - 📜 مانیتورینگ زنده لاگ‌ها و نوار پیشرفت عملیات
+* **مستندات تعاملی Swagger:** در آدرس `http://localhost:8000/docs`
+
+---
+
+### گام دوم: اجرای ساخت سشن در سرور مقصد (Worker)
+
+روی سرور یا سیستمی که می‌خواهید سشن جدید با آی‌پی آن ساخته شود، اسکریپت `run_worker.py` را اجرا کنید:
+
+#### حالت ۱: ساخت سشن برای یک شماره خاص
+```bash
+python run_worker.py --server-url http://MASTER_IP:8000 --phone +1234567890
+```
+اگر اکانت دارای پسورد دو مرحله‌ای (2FA) است:
+```bash
+python run_worker.py --server-url http://MASTER_IP:8000 --phone +1234567890 --password MY_2FA_PASSWORD
+```
+
+#### حالت ۲: انتقال خودکار تمام سشن‌های سرور مبدأ (All Sessions)
+با این دستور، ورکر ابتدا لیست تمام سشن‌های موجود در سرور مبدأ را از اندپوینت `/sessions` می‌گیرد و یکی‌یکی با فاصله زمانی ایمن آن‌ها را می‌سازد:
+```bash
+python run_worker.py --server-url http://MASTER_IP:8000 --all --delay 15
+```
+
+#### حالت ۳: خواندن شماره‌ها از فایل متنی
+یک فایل مثلاً `phones.txt` درست کنید که در هر خط یک شماره (یا `phone:password`) باشد:
+```bash
+python run_worker.py --server-url http://MASTER_IP:8000 --file phones.txt --delay 20
+```
+
+#### حالت ۴: استفاده از پروکسی اختصاصی
+```bash
+python run_worker.py --phone +1234567890 --proxy socks5://user:pass@proxy_host:1080
+```
+
+---
+
+## 🛡 تمهیدات ضد بن (Anti-Ban Measures)
+
+1. **پروفایل سخت‌افزاری پایدار (Consistent Device Profile):** از طریق `DeviceProfileFactory`، هر شماره به صورت قطعی (Deterministic) با یک مدل معتبر گوشی (Samsung S23، Xiaomi 13، Pixel 8 و...) ست می‌شود.
+2. **فیلتر زمانی کد لاگین (Timestamp Filtering):** برای جلوگیری از بازگرداندن کدهای قدیمی، کدها بر اساس زمان بعد از درخواست لاگین فیلتر می‌شوند.
+3. **فاصله زمانی ایمن (Pacing Delay):** در مهاجرت گروهی، بین ساخت هر سشن به صورت پیش‌فرض ۱۵ ثانیه تاخیر اعمال می‌شود تا از خطای `FLOOD_WAIT` سرورهای تلگرام جلوگیری گردد.
+
+---
+
+## 🧪 اجرای تست‌ها
+```bash
+python -m pytest
+```
