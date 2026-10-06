@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Telegram Session Manager | پنل مدیریت سشن‌های تلگرام</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50: '#eef2ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap');
+    body { font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, sans-serif; }
+    .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800/80 bg-slate-900/60 sticky top-0 z-40 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-sky-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
+          <i class="ph-bold ph-paper-plane-tilt text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+            Session Creator & Manager
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">Telethon + FastAPI</span>
+          </h1>
+          <p class="text-xs text-slate-400">سیستم هوشمند انتقال و مهاجرت خودکار سشن‌های تلگرام</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button onclick="reloadPool()" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition-all border border-slate-700 flex items-center gap-1.5">
+          <i class="ph-bold ph-arrows-clockwise text-sm"></i>
+          بارگذاری مجدد سشن‌ها
+        </button>
+        <a href="/docs" target="_blank" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 transition-all border border-indigo-500/30 flex items-center gap-1.5">
+          <i class="ph-bold ph-book-open-text text-sm"></i>
+          مستندات API
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- Stats Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="glass rounded-2xl p-4 flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-slate-400">سشن‌های مبدأ (فعال)</p>
+          <h3 id="stat-source-count" class="text-2xl font-bold text-white mt-1">۰</h3>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400 flex items-center justify-center text-2xl">
+          <i class="ph-bold ph-database"></i>
+        </div>
+      </div>
+
+      <div class="glass rounded-2xl p-4 flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-slate-400">سشن‌های مقصد (ساخته‌شده)</p>
+          <h3 id="stat-target-count" class="text-2xl font-bold text-emerald-400 mt-1">۰</h3>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center text-2xl">
+          <i class="ph-bold ph-check-circle"></i>
+        </div>
+      </div>
+
+      <div class="glass rounded-2xl p-4 flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-slate-400">وضعیت وب سرور</p>
+          <div class="flex items-center gap-2 mt-1">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span class="text-sm font-bold text-white">آنلاین (Master)</span>
+          </div>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center text-2xl">
+          <i class="ph-bold ph-hard-drives"></i>
+        </div>
+      </div>
+
+      <div class="glass rounded-2xl p-4 flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-slate-400">عملیات مهاجرت</p>
+          <h3 id="stat-job-status" class="text-sm font-bold text-slate-300 mt-1.5">آماده به کار</h3>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center text-2xl">
+          <i class="ph-bold ph-lightning"></i>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Migration Progress Bar (Hidden by default) -->
+    <div id="migration-progress-box" class="glass rounded-2xl p-5 border border-indigo-500/30 hidden space-y-3">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="w-3 h-3 rounded-full bg-indigo-500 animate-ping"></div>
+          <span class="text-sm font-semibold text-white">عملیات ساخت سشن در حال اجراست...</span>
+          <span id="current-phone-badge" class="text-xs bg-indigo-500/20 text-indigo-300 px-2.5 py-0.5 rounded-full font-mono"></span>
+        </div>
+        <span id="progress-percent" class="text-xs font-bold text-indigo-400">0%</span>
+      </div>
+      <div class="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden">
+        <div id="progress-bar-fill" class="bg-gradient-to-r from-indigo-500 to-sky-400 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+      </div>
+    </div>
+
+    <!-- Main Grid: Source Sessions & Target Sessions -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- Left 2 Cols: Source Sessions Table -->
+      <div class="lg:col-span-2 space-y-4">
+        <div class="glass rounded-2xl p-5 space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 class="text-base font-bold text-white flex items-center gap-2">
+                <i class="ph-bold ph-users text-indigo-400"></i>
+                سشن‌های مبدأ (Source Sessions)
+              </h2>
+              <p class="text-xs text-slate-400 mt-0.5">سشن‌های اولیه خریداری شده که در سرور مبدأ فعال هستند</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="startBatchMigrationPrompt()" class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md shadow-indigo-600/30 flex items-center gap-1.5">
+                <i class="ph-bold ph-play text-sm"></i>
+                مهاجرت تمام سشن‌ها
+              </button>
+            </div>
+          </div>
+
+          <!-- Table Container -->
+          <div class="overflow-x-auto border border-slate-800/80 rounded-xl">
+            <table class="w-full text-right text-xs">
+              <thead class="bg-slate-900/80 text-slate-400 font-semibold border-b border-slate-800">
+                <tr>
+                  <th class="p-3">نام سشن</th>
+                  <th class="p-3">شماره تلفن</th>
+                  <th class="p-3">پروفایل دیوایس</th>
+                  <th class="p-3">وضعیت</th>
+                  <th class="p-3 text-center">عملیات</th>
+                </tr>
+              </thead>
+              <tbody id="source-sessions-tbody" class="divide-y divide-slate-800/60 text-slate-300">
+                <tr>
+                  <td colspan="5" class="p-6 text-center text-slate-500">در حال بارگذاری سشن‌ها...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Live Migration Logs Console -->
+        <div class="glass rounded-2xl p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <i class="ph-bold ph-terminal-window text-sky-400"></i>
+              لاگ‌های زنده عملیات (Live Console)
+            </h3>
+            <button onclick="clearLogsUI()" class="text-xs text-slate-400 hover:text-white transition">پاکسازی</button>
+          </div>
+          <div id="logs-console" class="bg-slate-950/80 border border-slate-800 rounded-xl p-3 font-mono text-[11px] text-emerald-400/90 h-44 overflow-y-auto space-y-1 select-text">
+            <div class="text-slate-500">// لاگ‌های لحظه‌ای فرآیند لاگین و مهاجرت اینجا نمایش داده می‌شوند...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right 1 Col: Actions & Target Sessions -->
+      <div class="space-y-4">
+
+        <!-- Upload Session Card -->
+        <div class="glass rounded-2xl p-5 space-y-3">
+          <h2 class="text-sm font-bold text-white flex items-center gap-2">
+            <i class="ph-bold ph-upload-simple text-indigo-400"></i>
+            آپلود سشن جدید
+          </h2>
+          <p class="text-xs text-slate-400">فایل‌های <code class="text-indigo-300 bg-indigo-500/10 px-1 py-0.5 rounded">.session</code> را بکشید یا انتخاب کنید:</p>
+
+          <div id="drop-zone" onclick="document.getElementById('file-input').click()" class="border-2 border-dashed border-slate-700 hover:border-indigo-500/60 rounded-xl p-6 text-center cursor-pointer transition-all bg-slate-900/30">
+            <i class="ph-bold ph-cloud-arrow-up text-3xl text-indigo-400 mb-2"></i>
+            <p class="text-xs font-semibold text-slate-300">کلیک برای انتخاب فایل‌های سشن</p>
+            <p class="text-[11px] text-slate-500 mt-1">پشتیبانی از چندین فایل هم‌زمان</p>
+            <input type="file" id="file-input" multiple accept=".session" class="hidden" onchange="handleFileUpload(event)">
+          </div>
+        </div>
+
+        <!-- Target Sessions (Created) -->
+        <div class="glass rounded-2xl p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm font-bold text-white flex items-center gap-2">
+              <i class="ph-bold ph-folder-notch-open text-emerald-400"></i>
+              سشن‌های ساخته‌شده (مقصد)
+            </h2>
+            <button onclick="downloadAllZip()" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 transition">
+              <i class="ph-bold ph-file-zip text-sm"></i>
+              دانلود همه (.ZIP)
+            </button>
+          </div>
+
+          <div id="target-sessions-list" class="space-y-2 max-h-72 overflow-y-auto pr-1">
+            <div class="text-center p-4 text-xs text-slate-500">هنوز سشنی در پوشه مقصد ساخته نشده است.</div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- OTP Modal -->
+  <div id="otp-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass rounded-2xl max-w-sm w-full p-6 space-y-4 border border-indigo-500/40 animate-in fade-in zoom-in-95 duration-200">
+      <div class="text-center space-y-1">
+        <div class="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 mx-auto flex items-center justify-center text-2xl">
+          <i class="ph-bold ph-key"></i>
+        </div>
+        <h3 class="text-base font-bold text-white mt-2">کد ورود تلگرام (OTP)</h3>
+        <p id="otp-phone-text" class="text-xs font-mono text-indigo-300"></p>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-700/80 rounded-xl p-4 text-center">
+        <span id="otp-code-display" class="text-3xl font-extrabold tracking-widest font-mono text-emerald-400">12345</span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button onclick="copyOTP()" class="flex-1 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/30">
+          <i class="ph-bold ph-copy"></i>
+          کپی کد
+        </button>
+        <button onclick="closeOTPModal()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition border border-slate-700">
+          بستن
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let pollInterval = null;
+
+    async function initDashboard() {
+      await Promise.all([
+        loadStats(),
+        loadSourceSessions(),
+        loadTargetSessions(),
+        checkMigrationStatus()
+      ]);
+      setInterval(checkMigrationStatus, 3000);
+    }
+
+    async function loadStats() {
+      try {
+        const res = await fetch('/api/stats');
+        const data = await res.json();
+        document.getElementById('stat-source-count').innerText = data.source_sessions_count;
+        document.getElementById('stat-target-count').innerText = data.target_sessions_count;
+      } catch (e) {
+        console.error("Error loading stats:", e);
+      }
+    }
+
+    async function loadSourceSessions() {
+      try {
+        const res = await fetch('/api/sessions/source');
+        const list = await res.json();
+        const tbody = document.getElementById('source-sessions-tbody');
+
+        if (!list || list.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-500">هیچ سشنی یافت نشد. فایل‌های .session را داخل پوشه منبع قرار دهید یا از باکس آپلود استفاده کنید.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = list.map(item => `
+          <tr class="hover:bg-slate-900/40 transition">
+            <td class="p-3 font-semibold text-white font-mono">${item.session_name}</td>
+            <td class="p-3 font-mono text-sky-300">${item.phone}</td>
+            <td class="p-3 text-slate-400 text-[11px]">${item.device_model || '-'}</td>
+            <td class="p-3">
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${item.is_authorized ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}">
+                ${item.is_authorized ? 'فعال' : 'غیرمجاز / منقضی'}
+              </span>
+            </td>
+            <td class="p-3 text-center">
+              <div class="flex items-center justify-center gap-1.5">
+                <button onclick="getOTP('${item.phone}')" title="دریافت کد تایید" class="px-2.5 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition flex items-center gap-1">
+                  <i class="ph-bold ph-key"></i> کد لاگین
+                </button>
+                <button onclick="migrateSingle('${item.phone}')" title="مهاجرت تکی" class="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition flex items-center gap-1">
+                  <i class="ph-bold ph-lightning"></i> ساخت
+                </button>
+                <button onclick="deleteSourceSession('${item.session_name}')" title="حذف" class="p-1 rounded-lg bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 border border-rose-500/20 transition">
+                  <i class="ph-bold ph-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `).join('');
+
+      } catch (e) {
+        console.error("Error loading source sessions:", e);
+      }
+    }
+
+    async function loadTargetSessions() {
+      try {
+        const res = await fetch('/api/sessions/target');
+        const list = await res.json();
+        const container = document.getElementById('target-sessions-list');
+
+        if (!list || list.length === 0) {
+          container.innerHTML = `<div class="text-center p-4 text-xs text-slate-500">هنوز سشنی در پوشه مقصد ساخته نشده است.</div>`;
+          return;
+        }
+
+        container.innerHTML = list.map(item => `
+          <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs hover:border-slate-700 transition">
+            <div class="flex items-center gap-2">
+              <i class="ph-bold ph-file-code text-indigo-400 text-base"></i>
+              <div>
+                <p class="font-mono font-semibold text-slate-200">${item.filename}</p>
+                <p class="text-[10px] text-slate-400">${item.size_kb} KB • ${item.created_at}</p>
+              </div>
+            </div>
+            <a href="/api/download/target/${item.filename}" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1">
+              <i class="ph-bold ph-download-simple"></i>
+            </a>
+          </div>
+        `).join('');
+
+      } catch (e) {
+        console.error("Error loading target sessions:", e);
+      }
+    }
+
+    async function reloadPool() {
+      try {
+        const res = await fetch('/api/sessions/reload', { method: 'POST' });
+        if (res.ok) {
+          await initDashboard();
+          alert("تمام سشن‌ها با موفقیت مجدداً بارگذاری شدند.");
+        }
+      } catch (e) {
+        alert("خطا در بارگذاری مجدد: " + e);
+      }
+    }
+
+    async function handleFileUpload(event) {
+      const files = event.target.files;
+      if (!files.length) return;
+
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        formData.append("files", files[i]);
+      }
+
+      try {
+        const res = await fetch('/api/sessions/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert(`${data.uploaded_count} فایل با موفقیت آپلود و فعال شد.`);
+          await initDashboard();
+        } else {
+          alert("خطا در آپلود: " + data.detail);
+        }
+      } catch (e) {
+        alert("خطا در ارسال فایل: " + e);
+      }
+      event.target.value = '';
+    }
+
+    async function deleteSourceSession(name) {
+      if (!confirm(`آیا از حذف سشن ${name} اطمینان دارید؟`)) return;
+      try {
+        const res = await fetch(`/api/sessions/source/${name}`, { method: 'DELETE' });
+        if (res.ok) {
+          await initDashboard();
+        } else {
+          alert("خطا در حذف سشن");
+        }
+      } catch (e) {
+        alert("خطا: " + e);
+      }
+    }
+
+    async function getOTP(phone) {
+      try {
+        const res = await fetch(`/api/otp/${phone}`);
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('otp-phone-text').innerText = phone;
+          document.getElementById('otp-code-display').innerText = data.code;
+          document.getElementById('otp-modal').classList.remove('hidden');
+        } else {
+          const err = await res.json();
+          alert(`کد جدیدی برای شماره ${phone} یافت نشد.\n(${err.detail || 'بدون پیام جدید'})`);
+        }
+      } catch (e) {
+        alert("خطا در برقراری ارتباط با سرور: " + e);
+      }
+    }
+
+    function closeOTPModal() {
+      document.getElementById('otp-modal').classList.add('hidden');
+    }
+
+    function copyOTP() {
+      const code = document.getElementById('otp-code-display').innerText;
+      navigator.clipboard.writeText(code);
+      alert("کد " + code + " در کلیپ‌بورد کپی شد.");
+    }
+
+    async function startBatchMigrationPrompt() {
+      const delay = prompt("فاصله زمانی بین ساخت سشن‌ها به ثانیه (Cooldown):", "15");
+      if (!delay) return;
+
+      try {
+        const res = await fetch('/api/migrate/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ delay: parseFloat(delay) || 15 })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          checkMigrationStatus();
+        } else {
+          alert("خطا در اجرای فرآیند: " + data.detail);
+        }
+      } catch (e) {
+        alert("خطا در درخواست مهاجرت: " + e);
+      }
+    }
+
+    async function migrateSingle(phone) {
+      const pwd = prompt(`اگر اکانت ${phone} دارای پسورد دو مرحله‌ای (2FA) است، آن را وارد کنید (در غیر این صورت خالی بگذارید):`, "");
+      if (pwd === null) return;
+
+      try {
+        const res = await fetch('/api/migrate/single', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: phone, password: pwd || null })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          checkMigrationStatus();
+        } else {
+          alert("خطا: " + data.detail);
+        }
+      } catch (e) {
+        alert("خطا در ارسال درخواست: " + e);
+      }
+    }
+
+    async function checkMigrationStatus() {
+      try {
+        const res = await fetch('/api/migrate/status');
+        const data = await res.json();
+
+        const progressBox = document.getElementById('migration-progress-box');
+        const statStatus = document.getElementById('stat-job-status');
+        const progressBarFill = document.getElementById('progress-bar-fill');
+        const progressPercent = document.getElementById('progress-percent');
+        const currentPhoneBadge = document.getElementById('current-phone-badge');
+
+        if (data.is_running) {
+          progressBox.classList.remove('hidden');
+          statStatus.innerText = "در حال اجرا...";
+          statStatus.className = "text-sm font-bold text-indigo-400 mt-1.5 animate-pulse";
+
+          const pct = data.total > 0 ? Math.round((data.progress / data.total) * 100) : 0;
+          progressBarFill.style.width = `${pct}%`;
+          progressPercent.innerText = `${pct}% (${data.progress}/${data.total})`;
+          currentPhoneBadge.innerText = data.current_phone || '';
+        } else {
+          progressBox.classList.add('hidden');
+          statStatus.innerText = "آماده به کار";
+          statStatus.className = "text-sm font-bold text-slate-300 mt-1.5";
+        }
+
+        // Render logs
+        if (data.logs && data.logs.length > 0) {
+          const consoleEl = document.getElementById('logs-console');
+          consoleEl.innerHTML = data.logs.map(log => `<div>${log}</div>`).join('');
+          consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+
+        // Update stats
+        loadStats();
+        loadTargetSessions();
+
+      } catch (e) {
+        console.error("Error polling migration status:", e);
+      }
+    }
+
+    function clearLogsUI() {
+      document.getElementById('logs-console').innerHTML = `<div class="text-slate-500">// لاگ‌ها پاک شدند.</div>`;
+    }
+
+    function downloadAllZip() {
+      window.location.href = '/api/download/target-all-zip';
+    }
+
+    // Initialize on load
+    window.addEventListener('DOMContentLoaded', initDashboard);
+  </script>
+</body>
+</html>
