@@ -6,6 +6,11 @@ from config.settings import get_settings
 
 
 def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+
     settings = get_settings()
 
     parser = argparse.ArgumentParser(description="Run the Master Telegram Session OTP Server")
