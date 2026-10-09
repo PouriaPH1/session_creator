@@ -12,5 +12,7 @@ ENV/
 *.session-journal
 storage/source_sessions/*
 storage/target_sessions/*
+storage/passwords.json
+storage/*.csv
 !storage/source_sessions/.gitkeep
 !storage/target_sessions/.gitkeep

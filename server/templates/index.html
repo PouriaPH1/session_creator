@@ -39,16 +39,16 @@
         </div>
         <div>
           <h1 class="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-            Session Creator & Manager
+            Session Creator & Account Manager
             <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">Telethon + FastAPI</span>
           </h1>
-          <p class="text-xs text-slate-400">سیستم هوشمند انتقال و مهاجرت خودکار سشن‌های تلگرام</p>
+          <p class="text-xs text-slate-400">سیستم جامع مدیریت اکانت، تغییر پروفایل، تنظیم ۲FA و مهاجرت سشن‌ها</p>
         </div>
       </div>
       <div class="flex items-center gap-3">
         <button onclick="reloadPool()" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition-all border border-slate-700 flex items-center gap-1.5">
           <i class="ph-bold ph-arrows-clockwise text-sm"></i>
-          بارگذاری مجدد سشن‌ها
+          بارگذاری مجدد
         </button>
         <a href="/docs" target="_blank" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 transition-all border border-indigo-500/30 flex items-center gap-1.5">
           <i class="ph-bold ph-book-open-text text-sm"></i>
@@ -125,7 +125,7 @@
     <!-- Main Grid: Source Sessions & Target Sessions -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-      <!-- Left 2 Cols: Source Sessions Table -->
+      <!-- Left 2 Cols: Source Sessions Table & Management Actions -->
       <div class="lg:col-span-2 space-y-4">
         <div class="glass rounded-2xl p-5 space-y-4">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -134,9 +134,26 @@
                 <i class="ph-bold ph-users text-indigo-400"></i>
                 سشن‌های مبدأ (Source Sessions)
               </h2>
-              <p class="text-xs text-slate-400 mt-0.5">سشن‌های اولیه خریداری شده که در سرور مبدأ فعال هستند</p>
+              <p class="text-xs text-slate-400 mt-0.5">مدیریت مشخصات اکانت‌ها، پروفایل، رمز دو مرحله‌ای و مهاجرت</p>
             </div>
-            <div class="flex items-center gap-2">
+            
+            <!-- Batch Management Actions -->
+            <div class="flex flex-wrap items-center gap-2">
+              <button onclick="batchRandom2FAPrompt()" title="تعیین رمز رندوم قوی برای همه اکانت‌ها" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 transition flex items-center gap-1.5 shadow-sm">
+                <i class="ph-bold ph-lock-key"></i>
+                رمز رندوم همگانی (2FA)
+              </button>
+              
+              <button onclick="batchRandomNamesPrompt()" title="گذاشتن نام و فامیل طبیعی رندوم روی همه" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 transition flex items-center gap-1.5 shadow-sm">
+                <i class="ph-bold ph-user-switch"></i>
+                نام تصادفی همگانی
+              </button>
+
+              <button onclick="openPasswordsModal()" title="مشاهده و استخراج پسوردهای ذخیره‌شده" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition flex items-center gap-1.5 shadow-sm">
+                <i class="ph-bold ph-list-dashes"></i>
+                لیست پسوردها
+              </button>
+
               <button onclick="startBatchMigrationPrompt()" class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md shadow-indigo-600/30 flex items-center gap-1.5">
                 <i class="ph-bold ph-play text-sm"></i>
                 مهاجرت تمام سشن‌ها
@@ -149,11 +166,11 @@
             <table class="w-full text-right text-xs">
               <thead class="bg-slate-900/80 text-slate-400 font-semibold border-b border-slate-800">
                 <tr>
-                  <th class="p-3">نام سشن</th>
-                  <th class="p-3">شماره تلفن</th>
+                  <th class="p-3">شماره / نام سشن</th>
+                  <th class="p-3">نام اکانت</th>
                   <th class="p-3">پروفایل دیوایس</th>
                   <th class="p-3">وضعیت</th>
-                  <th class="p-3 text-center">عملیات</th>
+                  <th class="p-3 text-center">عملیات مدیریتی</th>
                 </tr>
               </thead>
               <tbody id="source-sessions-tbody" class="divide-y divide-slate-800/60 text-slate-300">
@@ -223,6 +240,158 @@
 
   </main>
 
+  <!-- ======================================================= -->
+  <!-- MODALS -->
+  <!-- ======================================================= -->
+
+  <!-- Profile Edit & Avatar Modal -->
+  <div id="profile-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass rounded-2xl max-w-md w-full p-6 space-y-4 border border-indigo-500/40 animate-in fade-in zoom-in-95 duration-200">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i class="ph-bold ph-user-circle text-indigo-400 text-lg"></i>
+          ویرایش نام و پروفایل اکانت
+        </h3>
+        <button onclick="closeProfileModal()" class="text-slate-400 hover:text-white transition">
+          <i class="ph-bold ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <input type="hidden" id="edit-profile-identifier">
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-400 mb-1">اکانت انتخابی:</label>
+          <div id="edit-profile-phone-badge" class="font-mono text-indigo-300 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800 font-bold"></div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-300 mb-1">نام (First Name):</label>
+            <input type="text" id="edit-first-name" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="block text-slate-300 mb-1">نام خانوادگی (Last Name):</label>
+            <input type="text" id="edit-last-name" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 mb-1">بیوگرافی (About / Bio):</label>
+          <input type="text" id="edit-about" placeholder="توضیحات کوتاه بیو..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <button onclick="saveProfile()" class="w-full py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/30">
+          <i class="ph-bold ph-floppy-disk"></i>
+          ذخیره تغییرات نام و بیو
+        </button>
+
+        <div class="border-t border-slate-800 pt-3">
+          <label class="block text-slate-300 mb-1">تغییر عکس پروفایل (Avatar):</label>
+          <div class="flex items-center gap-2">
+            <input type="file" id="avatar-file-input" accept="image/*" class="text-xs text-slate-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700">
+            <button onclick="uploadAvatar()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white transition flex items-center gap-1">
+              <i class="ph-bold ph-upload"></i> آپلود عکس
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2FA Password Modal -->
+  <div id="twofa-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass rounded-2xl max-w-sm w-full p-6 space-y-4 border border-amber-500/40 animate-in fade-in zoom-in-95 duration-200">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i class="ph-bold ph-lock-key text-amber-400 text-lg"></i>
+          تنظیم رمز دو مرحله‌ای (2FA)
+        </h3>
+        <button onclick="close2FAModal()" class="text-slate-400 hover:text-white transition">
+          <i class="ph-bold ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <input type="hidden" id="twofa-identifier">
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-400 mb-1">اکانت:</label>
+          <div id="twofa-phone-badge" class="font-mono text-amber-300 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800 font-bold"></div>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 mb-1">رمز عبور جدید:</label>
+          <div class="flex items-center gap-2">
+            <input type="text" id="twofa-new-password" placeholder="حداقل ۸ کاراکتر..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500">
+            <button onclick="generateRandomPassForInput()" title="تولید رمز قوی رندوم" class="px-2.5 py-2 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 transition flex items-center">
+              <i class="ph-bold ph-dice-five text-base"></i>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 mb-1">رمز فعلی (در صورت وجود):</label>
+          <input type="password" id="twofa-current-password" placeholder="اگر قبلاً رمزی داشته..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-500">
+        </div>
+
+        <div>
+          <label class="block text-slate-300 mb-1">راهنمای رمز (Hint - اختیاری):</label>
+          <input type="text" id="twofa-hint" placeholder="یادآور رمز..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-500">
+        </div>
+
+        <div class="flex items-center gap-2 pt-2">
+          <button onclick="save2FA()" class="flex-1 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-amber-600/30">
+            <i class="ph-bold ph-shield-check"></i>
+            ثبت رمز ۲FA
+          </button>
+          <button onclick="close2FAModal()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition border border-slate-700">
+            انصراف
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Passwords List Modal -->
+  <div id="passwords-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass rounded-2xl max-w-2xl w-full p-6 space-y-4 border border-emerald-500/40 animate-in fade-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i class="ph-bold ph-key text-emerald-400 text-lg"></i>
+          لیست پسوردهای ۲FA ذخیره‌شده
+        </h3>
+        <div class="flex items-center gap-2">
+          <button onclick="downloadPasswordsCSV()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1">
+            <i class="ph-bold ph-file-csv"></i> خروجی CSV (اکسل)
+          </button>
+          <button onclick="closePasswordsModal()" class="text-slate-400 hover:text-white transition">
+            <i class="ph-bold ph-x text-lg"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="overflow-y-auto flex-1 border border-slate-800 rounded-xl">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-900/80 text-slate-400 font-semibold border-b border-slate-800 sticky top-0">
+            <tr>
+              <th class="p-3">شماره اکانت</th>
+              <th class="p-3">رمز عبور (۲FA)</th>
+              <th class="p-3">توضیحات</th>
+              <th class="p-3">تاریخ ثبت</th>
+              <th class="p-3 text-center">کپی</th>
+            </tr>
+          </thead>
+          <tbody id="passwords-table-body" class="divide-y divide-slate-800/60 text-slate-300">
+            <tr>
+              <td colspan="5" class="p-6 text-center text-slate-500">هنوز رمزی ذخیره نشده است.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- OTP Modal -->
   <div id="otp-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="glass rounded-2xl max-w-sm w-full p-6 space-y-4 border border-indigo-500/40 animate-in fade-in zoom-in-95 duration-200">
@@ -287,8 +456,14 @@
 
         tbody.innerHTML = list.map(item => `
           <tr class="hover:bg-slate-900/40 transition">
-            <td class="p-3 font-semibold text-white font-mono">${item.session_name}</td>
-            <td class="p-3 font-mono text-sky-300">${item.phone}</td>
+            <td class="p-3">
+              <span class="font-mono text-sky-300 font-bold">${item.phone}</span>
+              <p class="font-mono text-[10px] text-slate-500">${item.session_name}</p>
+            </td>
+            <td class="p-3">
+              <span class="font-semibold text-white">${item.first_name || 'بدون نام'}</span>
+              ${item.username ? `<p class="text-[10px] text-indigo-400">@${item.username}</p>` : ''}
+            </td>
             <td class="p-3 text-slate-400 text-[11px]">${item.device_model || '-'}</td>
             <td class="p-3">
               <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${item.is_authorized ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}">
@@ -296,11 +471,23 @@
               </span>
             </td>
             <td class="p-3 text-center">
-              <div class="flex items-center justify-center gap-1.5">
-                <button onclick="getOTP('${item.phone}')" title="دریافت کد تایید" class="px-2.5 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition flex items-center gap-1">
-                  <i class="ph-bold ph-key"></i> کد لاگین
+              <div class="flex items-center justify-center gap-1.5 flex-wrap">
+                <button onclick="openProfileModal('${item.phone}', '${escapeHtml(item.first_name || '')}')" title="ویرایش نام و عکس پروفایل" class="px-2 py-1 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 transition flex items-center gap-1">
+                  <i class="ph-bold ph-user"></i> پروفایل
                 </button>
-                <button onclick="migrateSingle('${item.phone}')" title="مهاجرت تکی" class="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition flex items-center gap-1">
+                <button onclick="open2FAModal('${item.phone}')" title="تنظیم رمز دومرحله‌ای" class="px-2 py-1 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 transition flex items-center gap-1">
+                  <i class="ph-bold ph-lock-key"></i> ۲FA
+                </button>
+                <button onclick="getOTP('${item.phone}')" title="دریافت کد تایید تلگرام" class="px-2 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition flex items-center gap-1">
+                  <i class="ph-bold ph-key"></i> کد
+                </button>
+                <button onclick="terminateSessions('${item.phone}')" title="خروج از سایر نشست‌ها" class="p-1 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 transition">
+                  <i class="ph-bold ph-shield-slash"></i>
+                </button>
+                <button onclick="checkSpamBot('${item.phone}')" title="بررسی محدودیت اکانت با SpamBot" class="p-1 rounded-lg bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 border border-teal-500/30 transition">
+                  <i class="ph-bold ph-robot"></i>
+                </button>
+                <button onclick="migrateSingle('${item.phone}')" title="مهاجرت تکی" class="px-2 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition flex items-center gap-1">
                   <i class="ph-bold ph-lightning"></i> ساخت
                 </button>
                 <button onclick="deleteSourceSession('${item.session_name}')" title="حذف" class="p-1 rounded-lg bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 border border-rose-500/20 transition">
@@ -314,6 +501,10 @@
       } catch (e) {
         console.error("Error loading source sessions:", e);
       }
+    }
+
+    function escapeHtml(text) {
+      return text.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     }
 
     async function loadTargetSessions() {
@@ -400,6 +591,294 @@
       }
     }
 
+    // =======================================================
+    // Profile Management Functions
+    // =======================================================
+    function openProfileModal(identifier, currentFullName) {
+      document.getElementById('edit-profile-identifier').value = identifier;
+      document.getElementById('edit-profile-phone-badge').innerText = identifier;
+      
+      const parts = (currentFullName || '').split(' ');
+      document.getElementById('edit-first-name').value = parts[0] || '';
+      document.getElementById('edit-last-name').value = parts.slice(1).join(' ') || '';
+      document.getElementById('edit-about').value = '';
+      document.getElementById('avatar-file-input').value = '';
+
+      document.getElementById('profile-modal').classList.remove('hidden');
+    }
+
+    function closeProfileModal() {
+      document.getElementById('profile-modal').classList.add('hidden');
+    }
+
+    async function saveProfile() {
+      const identifier = document.getElementById('edit-profile-identifier').value;
+      const firstName = document.getElementById('edit-first-name').value;
+      const lastName = document.getElementById('edit-last-name').value;
+      const about = document.getElementById('edit-about').value;
+
+      if (!firstName.trim()) {
+        alert("نام (First Name) نمی‌تواند خالی باشد.");
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/accounts/profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            identifier: identifier,
+            first_name: firstName,
+            last_name: lastName,
+            about: about
+          })
+        });
+
+        if (res.ok) {
+          alert("پروفایل با موفقیت به‌روزرسانی شد!");
+          closeProfileModal();
+          await loadSourceSessions();
+        } else {
+          const err = await res.json();
+          alert("خطا در ذخیره پروفایل: " + err.detail);
+        }
+      } catch (e) {
+        alert("خطا در اتصال: " + e);
+      }
+    }
+
+    async function uploadAvatar() {
+      const identifier = document.getElementById('edit-profile-identifier').value;
+      const fileInput = document.getElementById('avatar-file-input');
+      if (!fileInput.files.length) {
+        alert("لطفاً یک تصویر انتخاب کنید.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", fileInput.files[0]);
+
+      try {
+        const res = await fetch(`/api/accounts/avatar?identifier=${encodeURIComponent(identifier)}`, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (res.ok) {
+          alert("عکس پروفایل با موفقیت تغییر یافت!");
+        } else {
+          const err = await res.json();
+          alert("خطا در آپلود عکس: " + err.detail);
+        }
+      } catch (e) {
+        alert("خطا در ارسال عکس: " + e);
+      }
+    }
+
+    // =======================================================
+    // 2FA Management Functions
+    // =======================================================
+    function open2FAModal(identifier) {
+      document.getElementById('twofa-identifier').value = identifier;
+      document.getElementById('twofa-phone-badge').innerText = identifier;
+      document.getElementById('twofa-new-password').value = '';
+      document.getElementById('twofa-current-password').value = '';
+      document.getElementById('twofa-hint').value = '';
+      document.getElementById('twofa-modal').classList.remove('hidden');
+    }
+
+    function close2FAModal() {
+      document.getElementById('twofa-modal').classList.add('hidden');
+    }
+
+    function generateRandomPassForInput() {
+      const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+      let pass = "";
+      for (let i = 0; i < 12; i++) {
+        pass += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      document.getElementById('twofa-new-password').value = pass;
+    }
+
+    async function save2FA() {
+      const identifier = document.getElementById('twofa-identifier').value;
+      const newPassword = document.getElementById('twofa-new-password').value;
+      const currentPassword = document.getElementById('twofa-current-password').value;
+      const hint = document.getElementById('twofa-hint').value;
+
+      if (!newPassword || newPassword.length < 6) {
+        alert("رمز عبور باید حداقل ۶ کاراکتر باشد.");
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/accounts/2fa', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            identifier: identifier,
+            new_password: newPassword,
+            current_password: currentPassword || null,
+            hint: hint
+          })
+        });
+
+        if (res.ok) {
+          alert(`رمز دو مرحله‌ای برای ${identifier} با موفقیت ثبت شد!\nرمز: ${newPassword}`);
+          close2FAModal();
+        } else {
+          const err = await res.json();
+          alert("خطا در ثبت رمز ۲FA: " + err.detail);
+        }
+      } catch (e) {
+        alert("خطا: " + e);
+      }
+    }
+
+    async function batchRandom2FAPrompt() {
+      if (!confirm("آیا مطمئن هستید که می‌خواهید برای تمام اکانت‌ها رمز رندوم و قوی اختصاص دهید؟\nتمامی پسوردهای جدید ذخیره شده و می‌توانید خروجی CSV بگیرید.")) {
+        return;
+      }
+
+      const length = prompt("طول رمز عبور تصادفی (پیش‌فرض ۱۲):", "12");
+      try {
+        alert("عملیات در حال انجام است. لطفاً کمی صبر کنید...");
+        const res = await fetch('/api/accounts/2fa/batch-random', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ length: parseInt(length) || 12, delay: 2.0 })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          const successes = data.results.filter(r => r.success).length;
+          alert(`فرآیند پایان یافت!\nتعداد موفق: ${successes} از ${data.total}\nبرای مشاهده و دانلود پسوردها، روی دکمه «لیست پسوردها» کلیک کنید.`);
+        } else {
+          alert("خطا: " + data.detail);
+        }
+      } catch (e) {
+        alert("خطا در ارسال درخواست: " + e);
+      }
+    }
+
+    async function batchRandomNamesPrompt() {
+      const choice = prompt("انتخاب زبان نام‌ها:\n1: نام و نام‌خانوادگی فارسی (پیش‌فرض)\n2: English Names", "1");
+      if (!choice) return;
+
+      const locale = choice === "2" ? "en" : "fa";
+
+      try {
+        alert("در حال تغییر نام اکانت‌ها به صورت تصادفی...");
+        const res = await fetch('/api/accounts/batch-names', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ locale: locale, delay: 1.5 })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          alert(`نام ${data.total} اکانت با موفقیت به نام‌های طبیعی تغییر یافت!`);
+          await loadSourceSessions();
+        } else {
+          alert("خطا: " + data.detail);
+        }
+      } catch (e) {
+        alert("خطا: " + e);
+      }
+    }
+
+    // =======================================================
+    // Passwords Modal & Export
+    // =======================================================
+    async function openPasswordsModal() {
+      try {
+        const res = await fetch('/api/accounts/passwords');
+        const passwords = await res.json();
+        const tbody = document.getElementById('passwords-table-body');
+
+        const keys = Object.keys(passwords);
+        if (keys.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-500">هنوز پسوردی ثبت نشده است.</td></tr>`;
+        } else {
+          tbody.innerHTML = keys.map(phone => {
+            const item = passwords[phone];
+            return `
+              <tr class="hover:bg-slate-900/40 transition">
+                <td class="p-3 font-mono font-bold text-sky-300">${phone}</td>
+                <td class="p-3 font-mono text-amber-300 font-bold select-all">${item.password}</td>
+                <td class="p-3 text-slate-400">${item.note || '-'}</td>
+                <td class="p-3 text-[11px] text-slate-500">${item.updated_at || '-'}</td>
+                <td class="p-3 text-center">
+                  <button onclick="navigator.clipboard.writeText('${item.password}'); alert('کپی شد!');" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300">
+                    <i class="ph-bold ph-copy"></i>
+                  </button>
+                </td>
+              </tr>
+            `;
+          }).join('');
+        }
+
+        document.getElementById('passwords-modal').classList.remove('hidden');
+      } catch (e) {
+        alert("خطا در دریافت پسوردها: " + e);
+      }
+    }
+
+    function closePasswordsModal() {
+      document.getElementById('passwords-modal').classList.add('hidden');
+    }
+
+    function downloadPasswordsCSV() {
+      window.location.href = '/api/accounts/passwords/export-csv';
+    }
+
+    // =======================================================
+    // Advanced Account Management
+    // =======================================================
+    async function terminateSessions(identifier) {
+      if (!confirm(`آیا مطمئن هستید که می‌خواهید تمام نشست‌های دیگر اکانت ${identifier} را لغو کنید؟`)) return;
+
+      try {
+        const res = await fetch('/api/accounts/terminate-sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: identifier })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+          alert("تمام نشست‌های دیگر این اکانت با موفقیت بسته شدند.");
+        } else if (data.status === 'forbidden') {
+          alert("توجه: طبق قوانین امنیتی تلگرام، برای بستن سایر نشست‌ها باید حداقل ۲۴ ساعت از لاگین این سشن گذشته باشد.");
+        } else {
+          alert("خطا: " + data.message);
+        }
+      } catch (e) {
+        alert("خطا: " + e);
+      }
+    }
+
+    async function checkSpamBot(identifier) {
+      try {
+        alert(`در حال استعلام وضعیت اکانت ${identifier} از اسپم‌بات...`);
+        const res = await fetch('/api/accounts/check-spam', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: identifier })
+        });
+        const data = await res.json();
+        if (data.status === 'clean') {
+          alert(`✅ وضعیت اکانت ${identifier} کاملاً سالم است و هیچ محدودیتی ندارد.\n\nپاسخ ربات:\n${data.response}`);
+        } else {
+          alert(`⚠️ وضعیت اکانت ${identifier}:\n${data.response}`);
+        }
+      } catch (e) {
+        alert("خطا در بررسی اسپم‌بات: " + e);
+      }
+    }
+
+    // =======================================================
+    // OTP & Migration
+    // =======================================================
     async function getOTP(phone) {
       try {
         const res = await fetch(`/api/otp/${phone}`);

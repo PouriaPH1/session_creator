@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from config.settings import get_settings
 from core.exceptions import OTPNotFoundError, SessionNotFoundError
+from server.account_service import AccountManagementService
 from server.migration_manager import MigrationJobManager
 from server.otp_service import TelethonOTPService
 from server.session_pool import TelethonSessionPool
@@ -26,6 +27,7 @@ settings = get_settings()
 pool = TelethonSessionPool(settings)
 otp_service = TelethonOTPService(pool)
 migration_manager = MigrationJobManager(settings, otp_service)
+account_service = AccountManagementService(pool, settings)
 
 
 @asynccontextmanager
@@ -70,6 +72,36 @@ class SingleMigrateRequest(BaseModel):
 
 class BatchMigrateRequest(BaseModel):
     delay: float = 15.0
+
+
+class UpdateProfileRequest(BaseModel):
+    identifier: str
+    first_name: str
+    last_name: str = ""
+    about: str = ""
+
+
+class Set2FARequest(BaseModel):
+    identifier: str
+    new_password: str
+    current_password: Optional[str] = None
+    hint: str = ""
+
+
+class BatchRandom2FARequest(BaseModel):
+    identifiers: Optional[List[str]] = None
+    length: int = 12
+    delay: float = 2.0
+
+
+class BatchNamesRequest(BaseModel):
+    locale: str = "fa"
+    identifiers: Optional[List[str]] = None
+    delay: float = 1.5
+
+
+class AccountActionRequest(BaseModel):
+    identifier: str
 
 
 # ==========================================
@@ -279,3 +311,115 @@ async def migrate_batch(req: BatchMigrateRequest):
 @app.get("/api/migrate/status", summary="Get status of current/last migration job")
 async def migrate_status():
     return migration_manager.get_status()
+
+
+# ==========================================
+# Account Management API
+# ==========================================
+@app.post("/api/accounts/profile", summary="Update profile name and bio")
+async def update_profile(req: UpdateProfileRequest):
+    try:
+        return await account_service.update_profile(
+            identifier=req.identifier,
+            first_name=req.first_name,
+            last_name=req.last_name,
+            about=req.about
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/accounts/avatar", summary="Upload profile avatar")
+async def upload_avatar(
+    identifier: str = Query(..., description="Phone or session name"),
+    file: UploadFile = File(...)
+):
+    try:
+        content = await file.read()
+        return await account_service.upload_avatar(
+            identifier=identifier,
+            photo_bytes=content,
+            filename=file.filename or "avatar.jpg"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/accounts/2fa", summary="Set or update 2FA password")
+async def set_2fa(req: Set2FARequest):
+    try:
+        return await account_service.set_2fa_password(
+            identifier=req.identifier,
+            new_password=req.new_password,
+            current_password=req.current_password,
+            hint=req.hint
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/accounts/2fa/batch-random", summary="Assign random 2FA passwords to accounts")
+async def batch_random_2fa(req: BatchRandom2FARequest):
+    try:
+        results = await account_service.batch_set_random_2fa(
+            identifiers=req.identifiers,
+            length=req.length,
+            delay=req.delay
+        )
+        return {
+            "status": "completed",
+            "total": len(results),
+            "results": results
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/accounts/passwords", summary="List stored 2FA passwords")
+async def list_passwords():
+    return account_service.get_all_passwords()
+
+
+@app.get("/api/accounts/passwords/export-csv", summary="Export passwords as CSV")
+async def export_passwords_csv():
+    csv_data = account_service.export_passwords_csv()
+    filename = f"telegram_2fa_passwords_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@app.post("/api/accounts/batch-names", summary="Assign random names to accounts")
+async def batch_names(req: BatchNamesRequest):
+    try:
+        results = await account_service.batch_set_random_names(
+            locale=req.locale,
+            identifiers=req.identifiers,
+            delay=req.delay
+        )
+        return {
+            "status": "completed",
+            "total": len(results),
+            "results": results
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/accounts/terminate-sessions", summary="Terminate other sessions")
+async def terminate_other_sessions(req: AccountActionRequest):
+    try:
+        return await account_service.terminate_other_sessions(req.identifier)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/accounts/check-spam", summary="Check account restriction via @SpamBot")
+async def check_spambot(req: AccountActionRequest):
+    try:
+        return await account_service.check_spambot(req.identifier)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
