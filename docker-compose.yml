@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  session-creator:
+    build: .
+    container_name: telegram_session_creator
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./storage:/app/storage
+      - ./.env:/app/.env
+    environment:
+      - PYTHONUNBUFFERED=1
