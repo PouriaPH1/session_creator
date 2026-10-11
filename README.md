@@ -144,21 +144,19 @@ python run_server.py
 
 ---
 
-### گام دوم: اجرای ساخت سشن در سرور مقصد (Worker)
+### گام دوم: اجرای ساخت سشن در سرور مقصد (Worker / سرور ۲)
 
-روی سرور یا سیستمی که می‌خواهید سشن جدید با آی‌پی آن ساخته شود، اسکریپت `run_worker.py` را اجرا کنید:
+روی سرور دوم که می‌خواهید سشن‌ها با آی‌پی آن ساخته شوند:
 
-#### حالت ۱: ساخت سشن برای یک شماره خاص
+#### ⚡ روش سریع (فقط ۱ دستور با اسکریپت worker.sh):
 ```bash
-python run_worker.py --server-url http://MASTER_IP:8000 --phone +1234567890
+git clone https://github.com/PouriaPH1/session_creator.git && cd session_creator && bash worker.sh http://MASTER_SERVER_IP:8000
 ```
-اگر اکانت دارای پسورد دو مرحله‌ای (2FA) است:
-```bash
-python run_worker.py --server-url http://MASTER_IP:8000 --phone +1234567890 --password MY_2FA_PASSWORD
-```
+این اسکریپت خودش محیط را آماده کرده، به سرور اول متصل می‌شود و تمام سشن‌ها را با آی‌پی سرور دوم ساخته و در `storage/target_sessions` تحویل می‌دهد!
 
-#### حالت ۲: انتقال خودکار تمام سشن‌های سرور مبدأ (All Sessions)
-با این دستور، ورکر ابتدا لیست تمام سشن‌های موجود در سرور مبدأ را از اندپوینت `/sessions` می‌گیرد و یکی‌یکی با فاصله زمانی ایمن آن‌ها را می‌سازد:
+---
+
+#### یا اجرای دستی با پایتون:
 ```bash
 python run_worker.py --server-url http://MASTER_IP:8000 --all --delay 15
 ```
