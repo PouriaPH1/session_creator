@@ -67,9 +67,18 @@ else
     echo -e "${GREEN}✅ Existing .env file found.${NC}"
 fi
 
-# Read port from .env
-PORT=$(grep -E "^SERVER_PORT=" .env | cut -d '=' -f 2 || echo "8000")
-PORT=${PORT:-8000}
+# Check free port using port_selector
+RAW_PORT=$(grep -E "^SERVER_PORT=" .env | cut -d '=' -f 2 || echo "8000")
+RAW_PORT=${RAW_PORT:-8000}
+
+PORT=$(./venv/bin/python -c "from core.port_selector import find_available_port; p, c = find_available_port($RAW_PORT); print(p)")
+
+if [ "$PORT" != "$RAW_PORT" ]; then
+    echo -e "${YELLOW}⚠️ پورت $RAW_PORT توسط سرویس دیگری اشغال شده بود!${NC}"
+    echo -e "${GREEN}🔄 پورت آزاد $PORT به صورت خودکار انتخاب شد.${NC}"
+    sed -i "s/^SERVER_PORT=.*/SERVER_PORT=$PORT/" .env
+    sed -i "s|^SERVER_URL=.*|SERVER_URL=http://127.0.0.1:$PORT|" .env
+fi
 
 echo -e "${BLUE}🛡️ [4/6] Configuring firewall (Opening port $PORT)...${NC}"
 if command -v ufw >/dev/null 2>&1; then

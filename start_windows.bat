@@ -34,11 +34,8 @@ if not exist ".env" (
     copy .env.example .env >nul
 )
 
-:: Auto Open Browser after 3 seconds in background
-start "" cmd /c "timeout /t 3 /nobreak >nul & start http://localhost:8000"
-
-:: Start Server
-echo [INFO] Starting Master Server & Web Admin Panel on http://localhost:8000 ...
-python run_server.py
+:: Start Server with automatic free port detection and browser launcher
+echo [INFO] Starting Master Server with dynamic free port detection...
+python run_server.py --open-browser
 
 pause
