@@ -112,10 +112,15 @@
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
           <div class="w-3 h-3 rounded-full bg-indigo-500 animate-ping"></div>
-          <span class="text-sm font-semibold text-white">عملیات ساخت سشن در حال اجراست...</span>
+          <span id="progress-title" class="text-sm font-semibold text-white">عملیات ساخت سشن در حال اجراست...</span>
           <span id="current-phone-badge" class="text-xs bg-indigo-500/20 text-indigo-300 px-2.5 py-0.5 rounded-full font-mono"></span>
         </div>
-        <span id="progress-percent" class="text-xs font-bold text-indigo-400">0%</span>
+        <div class="flex items-center gap-3">
+          <span id="progress-percent" class="text-xs font-bold text-indigo-400">0%</span>
+          <button onclick="resetMigration()" title="لغو یا ریست عملیات در حال اجرا" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition flex items-center gap-1">
+            <i class="ph-bold ph-arrow-counter-clockwise"></i> ریست / لغو
+          </button>
+        </div>
       </div>
       <div class="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden">
         <div id="progress-bar-fill" class="bg-gradient-to-r from-indigo-500 to-sky-400 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
@@ -948,6 +953,8 @@
       }
     }
 
+    let hideProgressTimeout = null;
+
     async function checkMigrationStatus() {
       try {
         const res = await fetch('/api/migrate/status');
@@ -958,16 +965,53 @@
         const progressBarFill = document.getElementById('progress-bar-fill');
         const progressPercent = document.getElementById('progress-percent');
         const currentPhoneBadge = document.getElementById('current-phone-badge');
+        const progressTitle = document.getElementById('progress-title');
 
         if (data.is_running) {
+          if (hideProgressTimeout) { clearTimeout(hideProgressTimeout); hideProgressTimeout = null; }
           progressBox.classList.remove('hidden');
-          statStatus.innerText = "در حال اجرا...";
+          statStatus.innerText = data.status_text || "در حال اجرا...";
           statStatus.className = "text-sm font-bold text-indigo-400 mt-1.5 animate-pulse";
+          if (progressTitle) progressTitle.innerText = "عملیات ساخت سشن در حال اجراست...";
 
-          const pct = data.total > 0 ? Math.round((data.progress / data.total) * 100) : 0;
+          let pct = 0;
+          if (data.total > 0) {
+            pct = Math.round((data.progress / data.total) * 100);
+            if (pct === 0 && data.current_phone) {
+              pct = 25; // Show active progress immediately
+            }
+          }
+          progressBarFill.className = "bg-gradient-to-r from-indigo-500 to-sky-400 h-2.5 rounded-full transition-all duration-500";
           progressBarFill.style.width = `${pct}%`;
           progressPercent.innerText = `${pct}% (${data.progress}/${data.total})`;
-          currentPhoneBadge.innerText = data.current_phone || '';
+          currentPhoneBadge.innerText = data.current_phone ? `${data.current_phone}` : '';
+        } else if (data.results && data.results.length > 0 && data.total > 0) {
+          // Finished state: keep visible and show 100% completion
+          progressBox.classList.remove('hidden');
+          const allOk = data.results.every(r => r.success);
+          if (allOk) {
+            statStatus.innerText = "تکمیل شد ✅";
+            statStatus.className = "text-sm font-bold text-emerald-400 mt-1.5";
+            if (progressTitle) progressTitle.innerText = "🎉 عملیات با موفقیت تکمیل شد!";
+            progressBarFill.className = "bg-emerald-500 h-2.5 rounded-full transition-all duration-500";
+            progressPercent.innerText = `۱۰۰% (${data.total}/${data.total}) موفق`;
+          } else {
+            statStatus.innerText = "اتمام با خطا ⚠️";
+            statStatus.className = "text-sm font-bold text-amber-400 mt-1.5";
+            if (progressTitle) progressTitle.innerText = "⚠️ عملیات به پایان رسید (همراه با خطا)";
+            progressBarFill.className = "bg-amber-500 h-2.5 rounded-full transition-all duration-500";
+            progressPercent.innerText = `${data.progress}/${data.total}`;
+          }
+          progressBarFill.style.width = `100%`;
+          currentPhoneBadge.innerText = 'پایان عملیات';
+
+          if (!hideProgressTimeout) {
+            hideProgressTimeout = setTimeout(() => {
+              progressBox.classList.add('hidden');
+              statStatus.innerText = "آماده به کار";
+              statStatus.className = "text-sm font-bold text-slate-300 mt-1.5";
+            }, 10000);
+          }
         } else {
           progressBox.classList.add('hidden');
           statStatus.innerText = "آماده به کار";
@@ -987,6 +1031,18 @@
 
       } catch (e) {
         console.error("Error polling migration status:", e);
+      }
+    }
+
+    async function resetMigration() {
+      try {
+        const res = await fetch('/api/migrate/reset', { method: 'POST' });
+        if (res.ok) {
+          await checkMigrationStatus();
+          alert("وضعیت عملیات با موفقیت ریست شد.");
+        }
+      } catch (e) {
+        alert("خطا در ریست عملیات: " + e);
       }
     }
 

@@ -48,6 +48,7 @@ class MigrationJobManager:
         self.otp_service = otp_service
         self.local_otp_client = LocalOTPClient(otp_service)
         self.is_running = False
+        self.status_text = "آماده به کار"
         self.current_phone: Optional[str] = None
         self.progress: int = 0
         self.total: int = 0
@@ -58,12 +59,20 @@ class MigrationJobManager:
     def get_status(self) -> Dict:
         return {
             "is_running": self.is_running,
+            "status_text": self.status_text,
             "progress": self.progress,
             "total": self.total,
             "current_phone": self.current_phone,
             "results": self.results,
             "logs": self.logs[-50:]  # last 50 log messages
         }
+
+    def reset(self) -> None:
+        """Force resets job state if stuck."""
+        self.is_running = False
+        self.current_phone = None
+        self.status_text = "آماده به کار"
+        self._add_log("⚠️ وضعیت عملیات به صورت دستی بازنشانی (ریست) شد.")
 
     def _add_log(self, message: str) -> None:
         now_str = datetime.datetime.now().strftime("%H:%M:%S")
@@ -82,6 +91,7 @@ class MigrationJobManager:
             if self.is_running:
                 return False
             self.is_running = True
+            self.status_text = "شروع عملیات..."
             self.progress = 0
             self.total = len(phones)
             self.results = []
@@ -97,45 +107,54 @@ class MigrationJobManager:
         passwords: Dict[str, str],
         delay: float
     ) -> None:
-        creator = TelegramSessionCreator(
-            settings=self.settings,
-            otp_client=self.local_otp_client
-        )
-        self._add_log(f"Starting batch migration for {len(phones)} accounts...")
+        try:
+            creator = TelegramSessionCreator(
+                settings=self.settings,
+                otp_client=self.local_otp_client
+            )
+            self._add_log(f"Starting batch migration for {len(phones)} accounts...")
 
-        for idx, phone in enumerate(phones, start=1):
-            self.current_phone = phone
-            self._add_log(f"[{idx}/{len(phones)}] Requesting migration for {phone}...")
-            pwd = passwords.get(phone)
+            for idx, phone in enumerate(phones, start=1):
+                self.current_phone = phone
+                self.status_text = f"در حال پردازش {phone} ({idx}/{len(phones)})..."
+                self._add_log(f"[{idx}/{len(phones)}] Requesting migration for {phone}...")
+                pwd = passwords.get(phone)
 
-            try:
-                target_file = await creator.create_single_session(
-                    phone=phone,
-                    two_fa_password=pwd
-                )
-                self.results.append({
-                    "phone": phone,
-                    "success": True,
-                    "detail": f"Saved {target_file.name}",
-                    "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                })
-                self._add_log(f"[{idx}/{len(phones)}] ✅ Success for {phone}")
+                try:
+                    target_file = await creator.create_single_session(
+                        phone=phone,
+                        two_fa_password=pwd
+                    )
+                    self.results.append({
+                        "phone": phone,
+                        "success": True,
+                        "detail": f"Saved {target_file.name}",
+                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    })
+                    self._add_log(f"[{idx}/{len(phones)}] ✅ Success for {phone}")
 
-            except Exception as e:
-                self.results.append({
-                    "phone": phone,
-                    "success": False,
-                    "detail": str(e),
-                    "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                })
-                self._add_log(f"[{idx}/{len(phones)}] ❌ Failed for {phone}: {e}")
+                except Exception as e:
+                    self.results.append({
+                        "phone": phone,
+                        "success": False,
+                        "detail": str(e),
+                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    })
+                    self._add_log(f"[{idx}/{len(phones)}] ❌ Failed for {phone}: {e}")
 
-            self.progress = idx
+                self.progress = idx
 
-            if idx < len(phones):
-                self._add_log(f"Waiting {delay}s cooldown before next session...")
-                await asyncio.sleep(delay)
+                if idx < len(phones):
+                    self.status_text = f"مکث {delay} ثانیه‌ای..."
+                    self._add_log(f"Waiting {delay}s cooldown before next session...")
+                    await asyncio.sleep(delay)
 
-        self._add_log("🎉 Batch migration finished!")
-        self.is_running = False
-        self.current_phone = None
+            self._add_log("🎉 Batch migration finished!")
+            self.status_text = "تکمیل شد"
+        except Exception as e:
+            self._add_log(f"💥 Fatal error during migration: {e}")
+            logger.error(f"Fatal error in _run_batch_worker: {e}", exc_info=True)
+            self.status_text = f"خطا: {e}"
+        finally:
+            self.is_running = False
+            self.current_phone = None

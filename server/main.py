@@ -322,6 +322,12 @@ async def migrate_status():
     return migration_manager.get_status()
 
 
+@app.post("/api/migrate/reset", summary="Force reset stuck migration job")
+async def reset_migration():
+    migration_manager.reset()
+    return {"status": "reset"}
+
+
 # ==========================================
 # Account Management API
 # ==========================================

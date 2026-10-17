@@ -82,12 +82,12 @@ class TelegramSessionCreator:
             if await client.is_user_authorized():
                 logger.info(f"Session {session_name} is already authorized!")
                 me = await client.get_me()
-                logger.info(f"Logged in as User: {me.first_me} ({me.id})")
+                logger.info(f"Logged in as User: {me.first_name} ({me.id})")
                 await client.disconnect()
                 return Path(f"{target_path}.session")
 
             # 1. Request OTP Code from Telegram
-            request_timestamp = time.time() - 2.0  # slight grace period
+            request_timestamp = time.time() - 120.0  # safe 2-minute grace period to prevent clock skew
             logger.info(f"Sending login code request for {clean_phone}...")
 
             sent_code = await client.send_code_request(clean_phone)
@@ -168,6 +168,13 @@ class TelegramSessionCreator:
             logger.error(f"Unexpected error while creating session for {clean_phone}: {e}")
             if client.is_connected():
                 await client.disconnect()
+            # Clean up incomplete session file if creation failed
+            session_file = Path(f"{target_path}.session")
+            if session_file.exists():
+                try:
+                    session_file.unlink()
+                except Exception:
+                    pass
             raise
 
     async def create_batch_sessions(
