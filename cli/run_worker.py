@@ -100,6 +100,22 @@ async def async_main():
     # Apply override delay if provided
     settings.batch_sleep_delay = args.delay
 
+    # If local credentials are still default placeholders, fetch from Master Server
+    if settings.api_id == 12345678 or settings.api_hash == "your_api_hash_here":
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                cfg_res = await client.get(f"{args.server_url.rstrip('/')}/api/config/telegram")
+                if cfg_res.status_code == 200:
+                    cfg_data = cfg_res.json()
+                    r_id = cfg_data.get("api_id")
+                    r_hash = cfg_data.get("api_hash")
+                    if r_id and r_hash and r_id != 12345678:
+                        settings.api_id = int(r_id)
+                        settings.api_hash = str(r_hash)
+                        logger.info("Automatically fetched Telegram API credentials from Master Server.")
+        except Exception as e:
+            logger.debug(f"Could not auto-fetch Telegram credentials from master: {e}")
+
     proxy_cfg = parse_proxy(args.proxy) if args.proxy else None
     otp_client = HttpOTPClient(base_url=args.server_url)
     creator = TelegramSessionCreator(

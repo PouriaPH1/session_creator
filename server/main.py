@@ -138,6 +138,15 @@ async def health_check():
     }
 
 
+@app.get("/api/config/telegram", summary="Get Telegram API ID/Hash for workers")
+async def get_telegram_config():
+    """Provides public Telegram API credentials to authorized workers for seamless setup."""
+    return {
+        "api_id": settings.api_id,
+        "api_hash": settings.api_hash
+    }
+
+
 # ==========================================
 # Source Sessions Management API
 # ==========================================
