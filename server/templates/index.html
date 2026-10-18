@@ -168,6 +168,11 @@
                 مدیریت پروکسی‌ها
               </button>
 
+              <button onclick="deleteAllSourceSessions()" title="حذف تمام سشن‌های مبدأ از پنل" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 transition flex items-center gap-1.5 shadow-sm">
+                <i class="ph-bold ph-trash"></i>
+                حذف تمام سشن‌ها
+              </button>
+
               <button onclick="openBatchMigrateModal()" class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md shadow-indigo-600/30 flex items-center gap-1.5">
                 <i class="ph-bold ph-play text-sm"></i>
                 ساخت تمام سشن‌ها
@@ -237,10 +242,16 @@
               <i class="ph-bold ph-folder-notch-open text-emerald-400"></i>
               سشن‌های ساخته‌شده (مقصد)
             </h2>
-            <button onclick="downloadAllZip()" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 transition">
-              <i class="ph-bold ph-file-zip text-sm"></i>
-              دانلود همه (.ZIP)
-            </button>
+            <div class="flex items-center gap-1.5">
+              <button onclick="downloadAllZip()" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 transition">
+                <i class="ph-bold ph-file-zip text-sm"></i>
+                دانلود همه (.ZIP)
+              </button>
+              <button onclick="deleteAllTargetSessions()" title="حذف تمام سشن‌های ساخته‌شده مقصد" class="px-2 py-1 rounded-lg text-xs font-semibold bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 flex items-center gap-1 transition">
+                <i class="ph-bold ph-trash text-sm"></i>
+                حذف همه
+              </button>
+            </div>
           </div>
 
           <!-- Category Filter Pills -->
@@ -814,6 +825,23 @@
       }
     }
 
+    async function deleteAllTargetSessions() {
+      if (!confirm("⚠️ هشدار:\nآیا از حذف تمام سشن‌های ساخته‌شده مقصد اطمینان دارید؟\nاین عملیات تمام فایل‌های سشن مقصد را حذف خواهد کرد.")) return;
+      try {
+        const res = await fetch('/api/sessions/target-all', { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok) {
+          alert(`تمام سشن‌های مقصد با موفقیت حذف شدند (${data.deleted_count || 0} فایل پاک شد).`);
+          await loadTargetSessions();
+          await loadStats();
+        } else {
+          alert("خطا در حذف سشن‌های مقصد: " + (data.detail || "مشکل نامشخص"));
+        }
+      } catch (e) {
+        alert("خطا: " + e);
+      }
+    }
+
     async function reloadPool() {
       try {
         const res = await fetch('/api/sessions/reload', { method: 'POST' });
@@ -868,6 +896,24 @@
         }
       } catch (e) {
         alert("خطا: " + e);
+      }
+    }
+
+    async function deleteAllSourceSessions() {
+      const confirmed = confirm("⚠️ هشدار مهم:\nآیا از حذف تمام سشن‌های مبدأ از پنل اطمینان دارید؟\nتمام فایل‌های سشن ذخیره‌شده پاک خواهند شد و این عملیات غیرقابل بازگشت است.");
+      if (!confirmed) return;
+
+      try {
+        const res = await fetch('/api/sessions/source-all', { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok) {
+          alert(`تمام سشن‌های مبدأ با موفقیت حذف شدند (${data.deleted_count || 0} فایل پاک شد).`);
+          await initDashboard();
+        } else {
+          alert("خطا در حذف سشن‌ها: " + (data.detail || "مشکل نامشخص"));
+        }
+      } catch (e) {
+        alert("خطا در ارسال درخواست حذف: " + e);
       }
     }
 

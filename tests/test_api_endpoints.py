@@ -38,3 +38,36 @@ def test_migration_status_endpoint():
     data = response.json()
     assert "is_running" in data
     assert "logs" in data
+
+
+def test_delete_all_source_endpoint(tmp_path, monkeypatch):
+    from config.settings import get_settings
+    settings = get_settings()
+    test_src = tmp_path / "source"
+    test_src.mkdir(parents=True, exist_ok=True)
+    dummy_file = test_src / "dummy123.session"
+    dummy_file.write_text("test")
+    monkeypatch.setattr(settings, "source_sessions_dir", test_src)
+
+    res = client.delete("/api/sessions/source-all")
+    assert res.status_code == 200
+    assert res.json()["status"] == "deleted"
+    assert res.json()["deleted_count"] >= 1
+    assert not dummy_file.exists()
+
+
+def test_delete_all_target_endpoint(tmp_path, monkeypatch):
+    from config.settings import get_settings
+    settings = get_settings()
+    test_tgt = tmp_path / "target"
+    test_tgt.mkdir(parents=True, exist_ok=True)
+    dummy_file = test_tgt / "dummy456.session"
+    dummy_file.write_text("test")
+    monkeypatch.setattr(settings, "target_sessions_dir", test_tgt)
+
+    res = client.delete("/api/sessions/target-all")
+    assert res.status_code == 200
+    assert res.json()["status"] == "deleted"
+    assert res.json()["deleted_count"] >= 1
+    assert not dummy_file.exists()
+

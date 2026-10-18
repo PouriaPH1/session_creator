@@ -200,14 +200,44 @@ async def upload_sessions(files: List[UploadFile] = File(...)):
     }
 
 
+@app.delete("/api/sessions/source-all", summary="Delete all source session files")
+async def delete_all_source_sessions():
+    await pool.stop()
+    session_files = list(settings.source_sessions_dir.glob("*.session*"))
+    deleted_count = 0
+    for f in session_files:
+        try:
+            f.unlink()
+            deleted_count += 1
+        except Exception as e:
+            logger.warning(f"Error deleting session file {f.name}: {e}")
+
+    await pool.reload()
+    return {"status": "deleted", "deleted_count": deleted_count}
+
+
 @app.delete("/api/sessions/source/{session_name}", summary="Delete source session file")
 async def delete_source_session(session_name: str):
+    client = pool.get_client(session_name)
+    if client and client.is_connected():
+        try:
+            await client.disconnect()
+        except Exception:
+            pass
+
     session_file = settings.source_sessions_dir / f"{session_name}.session"
     if session_file.exists():
         session_file.unlink()
+        journal = settings.source_sessions_dir / f"{session_name}.session-journal"
+        if journal.exists():
+            try:
+                journal.unlink()
+            except Exception:
+                pass
         await pool.reload()
         return {"status": "deleted", "session": session_name}
     raise HTTPException(status_code=404, detail="Session file not found.")
+
 
 
 @app.post("/sessions/reload", summary="Reload sessions from source folder")
@@ -258,12 +288,39 @@ async def list_target_sessions():
     return sorted(results, key=lambda x: x["created_at"], reverse=True)
 
 
+@app.delete("/api/sessions/target-all", summary="Delete all generated target sessions")
+async def delete_all_target_sessions():
+    import json
+    target_files = list(settings.target_sessions_dir.glob("*.session*"))
+    deleted_count = 0
+    for f in target_files:
+        try:
+            f.unlink()
+            deleted_count += 1
+        except Exception as e:
+            logger.warning(f"Error deleting target file {f.name}: {e}")
+
+    meta_file = settings.base_dir / "storage" / "target_sessions_metadata.json"
+    if meta_file.exists():
+        try:
+            meta_file.write_text("{}", encoding="utf-8")
+        except Exception:
+            pass
+    return {"status": "deleted", "deleted_count": deleted_count}
+
+
 @app.delete("/api/sessions/target/{filename}", summary="Delete a generated target session")
 async def delete_target_session(filename: str):
     import json
     file_path = settings.target_sessions_dir / filename
     if file_path.exists():
         file_path.unlink()
+        journal = settings.target_sessions_dir / f"{filename}-journal"
+        if journal.exists():
+            try:
+                journal.unlink()
+            except Exception:
+                pass
         meta_file = settings.base_dir / "storage" / "target_sessions_metadata.json"
         if meta_file.exists():
             try:
