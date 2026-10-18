@@ -19,3 +19,10 @@ storage/*.csv
 storage/active_port.txt
 !storage/source_sessions/.gitkeep
 !storage/target_sessions/.gitkeep
+
+# Session archives and extracted data
+sessions/
+extracted_sessions/
+*.zip
+phones.txt
+
