@@ -33,6 +33,15 @@ case "$1" in
         echo -e "${CYAN}Streaming live logs (Ctrl+C to exit)...${NC}"
         sudo journalctl -u $SERVICE_NAME -f -n 50
         ;;
+    update)
+        echo -e "${BLUE}Updating project from Git and installing dependencies...${NC}"
+        git pull
+        if [ -d "venv" ]; then
+            ./venv/bin/pip install -r requirements.txt -q
+        fi
+        sudo systemctl restart $SERVICE_NAME
+        echo -e "${GREEN}Update and restart completed successfully!${NC}"
+        ;;
     uninstall)
         read -p "Are you sure you want to disable and remove the service? [y/N]: " confirm
         if [[ "$confirm" =~ ^[yY]$ ]]; then
@@ -45,7 +54,7 @@ case "$1" in
         ;;
     *)
         echo -e "${CYAN}Telegram Session Creator Management Menu${NC}"
-        echo "Usage: ./manage.sh {start|stop|restart|status|logs|uninstall}"
+        echo "Usage: ./manage.sh {start|stop|restart|status|logs|update|uninstall}"
         echo ""
         echo "Commands:"
         echo "  start     - Start background service"
@@ -53,6 +62,7 @@ case "$1" in
         echo "  restart   - Restart background service"
         echo "  status    - Check current running status"
         echo "  logs      - View real-time application logs"
+        echo "  update    - Pull latest code & install missing packages"
         echo "  uninstall - Remove systemd background service"
         exit 1
         ;;

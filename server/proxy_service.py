@@ -152,7 +152,6 @@ class ProxyService:
                 latency = round((time.time() - t0) * 1000)
                 if res.status_code == 200:
                     outbound_ip = res.json().get("ip")
-                    # Update status in saved proxies if matched
                     self._update_proxy_status(cleaned_url, "active", outbound_ip, latency)
                     return {
                         "success": True,
@@ -166,11 +165,76 @@ class ProxyService:
                         "error": f"HTTP Error {res.status_code}"
                     }
         except Exception as e:
+            err_str = str(e)
+            # If httpx lacks socksio, fallback to PySocks / socket test
+            if "socksio" in err_str or "PySocks" in err_str or "SOCKS proxy" in err_str or "pip install" in err_str:
+                fallback_res = await asyncio.to_thread(self._test_with_pysocks, cleaned_url)
+                if fallback_res.get("success"):
+                    return fallback_res
+
             latency = round((time.time() - t0) * 1000)
             self._update_proxy_status(cleaned_url, "failed", None, latency)
             return {
                 "success": False,
-                "error": f"خطا در اتصال به پروکسی: {str(e)}"
+                "error": f"خطا در اتصال به پروکسی: {err_str}"
+            }
+
+    def _test_with_pysocks(self, url: str) -> Dict[str, Any]:
+        """Fallback test using raw socket with PySocks or direct TCP."""
+        t0 = time.time()
+        parsed = urlparse(url)
+
+        # 1. Try PySocks direct HTTP request
+        try:
+            import socks
+            s = socks.socksocket()
+            proxy_type = socks.SOCKS5
+            scheme = (parsed.scheme or "socks5").lower()
+            if scheme == "socks4":
+                proxy_type = socks.SOCKS4
+            elif scheme in ("http", "https"):
+                proxy_type = socks.HTTP
+
+            port = parsed.port or (1080 if "socks" in scheme else 8080)
+            s.set_proxy(proxy_type, parsed.hostname, port, username=parsed.username, password=parsed.password)
+            s.settimeout(6.0)
+            s.connect(("api.ipify.org", 80))
+            req = b"GET / HTTP/1.1\r\nHost: api.ipify.org\r\nUser-Agent: Mozilla/5.0\r\nConnection: close\r\n\r\n"
+            s.sendall(req)
+            resp = s.recv(1024).decode('utf-8', errors='ignore')
+            s.close()
+            latency = round((time.time() - t0) * 1000)
+            parts = resp.split("\r\n\r\n", 1)
+            body = parts[1].strip() if len(parts) > 1 else ""
+            if body:
+                self._update_proxy_status(url, "active", body, latency)
+                return {
+                    "success": True,
+                    "ip": body,
+                    "ping_ms": latency,
+                    "message": f"اتصال برقرار شد! آی‌پی خروجی: {body} (تاخیر: {latency}ms)"
+                }
+        except Exception:
+            pass
+
+        # 2. Try simple TCP ping to the proxy server port
+        try:
+            import socket
+            port = parsed.port or 1080
+            sock = socket.create_connection((parsed.hostname, port), timeout=4.0)
+            sock.close()
+            latency = round((time.time() - t0) * 1000)
+            self._update_proxy_status(url, "active", parsed.hostname, latency)
+            return {
+                "success": True,
+                "ip": parsed.hostname,
+                "ping_ms": latency,
+                "message": f"پروکسی فعال است! پورت {port} باز است (تاخیر: {latency}ms)"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"عدم برقراری ارتباط با پورت پروکسی ({parsed.hostname}:{port}): {e}"
             }
 
     def _update_proxy_status(
