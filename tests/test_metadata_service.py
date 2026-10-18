@@ -116,3 +116,23 @@ def test_api_categories_and_metadata_endpoints():
     tgt_data = tgt_res.json()
     assert tgt_data["status"] == "updated"
     assert tgt_data["metadata"]["category"] == "TargetCategory"
+
+    # 4. Batch update source metadata
+    batch_src = client.post("/api/sessions/source/batch-metadata", json={
+        "identifiers": ["+11112223344", "+15556667788"],
+        "category": "BulkGroup",
+        "remark": "Batch Remark"
+    })
+    assert batch_src.status_code == 200
+    assert batch_src.json()["status"] == "success"
+    assert batch_src.json()["updated_count"] == 2
+
+    # 5. Batch update target metadata
+    batch_tgt = client.post("/api/sessions/target/batch-metadata", json={
+        "filenames": ["target1.session", "target2.session"],
+        "category": "BulkTargetGroup",
+        "remark": "Target Batch Remark"
+    })
+    assert batch_tgt.status_code == 200
+    assert batch_tgt.json()["status"] == "success"
+    assert batch_tgt.json()["updated_count"] == 2

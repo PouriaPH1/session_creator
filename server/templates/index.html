@@ -168,6 +168,11 @@
                 مدیریت پروکسی‌ها
               </button>
 
+              <button onclick="openBatchCategoryModal()" title="دسته‌بندی یا تغییر برچسب دسته‌جمعی سشن‌های موجود یا بدون دسته" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition flex items-center gap-1.5 shadow-sm">
+                <i class="ph-bold ph-tag"></i>
+                دسته‌بندی گروهی
+              </button>
+
               <button onclick="deleteAllSourceSessions()" title="حذف تمام سشن‌های مبدأ از پنل" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 transition flex items-center gap-1.5 shadow-sm">
                 <i class="ph-bold ph-trash"></i>
                 حذف تمام سشن‌ها
@@ -782,9 +787,71 @@
           ذخیره تغییرات
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Batch Category Modal -->
+  <div id="batch-category-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass rounded-2xl max-w-md w-full p-6 space-y-4 border border-indigo-500/40 animate-in fade-in zoom-in-95 duration-200">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i class="ph-bold ph-tag text-indigo-400 text-lg"></i>
+          دسته‌بندی گروهی سشن‌ها
+        </h3>
+        <button onclick="closeBatchCategoryModal()" class="text-slate-400 hover:text-white transition">
+          <i class="ph-bold ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-300 mb-1">کدام سشن‌ها دسته‌بندی شوند؟</label>
+          <select id="batch-cat-scope" onchange="handleBatchCatScopeChange(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+            <option value="uncategorized">فقط سشن‌های قبلی که هنوز دسته‌بندی ندارند</option>
+            <option value="all">تمام سشن‌های موجود در پنل</option>
+            <option value="manual">وارد کردن دستی شماره‌ها / نام سشن‌ها</option>
+          </select>
+        </div>
+
+        <div id="batch-cat-manual-box" class="hidden">
+          <label class="block text-slate-300 mb-1">لیست شماره‌ها یا نام سشن‌ها (هر خط یک شماره):</label>
+          <textarea id="batch-cat-manual-input" rows="3" placeholder="+1234567890&#10;+989123456789" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"></textarea>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 mb-1">نام دسته‌بندی (Category):</label>
+          <input type="text" id="batch-cat-category" list="category-datalist" placeholder="مثلاً: دسته ۱، اکانت‌های اختصاصی..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-xs">
+        </div>
+
+        <div>
+          <label class="block text-slate-300 mb-1">ریمارک / یادداشت (Remark - اختیاری):</label>
+          <input type="text" id="batch-cat-remark" placeholder="مثلاً: خرید ۲۵ مهر..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-xs">
+        </div>
+
+        <div class="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-[11px] text-slate-400">
+          <i class="ph-bold ph-info text-indigo-400 ml-1"></i>
+          این تغییر روی سشن‌های انتخابی اعمال می‌شود و فوراً در جدول با برچسب مشخص خواهند شد.
+        </div>
+
+        <button onclick="confirmBatchCategory()" class="w-full py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/30">
+          <i class="ph-bold ph-check"></i>
+          اعمال دسته‌بندی به سشن‌ها
+        </button>
+      </div>
+    </div>
   </div>
 
   <script>
+    function escapeHtml(text) {
+      if (text === null || text === undefined) return '';
+      return String(text)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
     let pollInterval = null;
 
     async function initDashboard() {
@@ -1298,6 +1365,77 @@
         }
       } catch (err) {
         alert("خطا در برقراری ارتباط: " + err);
+      }
+    }
+
+    function openBatchCategoryModal() {
+      document.getElementById('batch-cat-scope').value = 'uncategorized';
+      document.getElementById('batch-cat-manual-box').classList.add('hidden');
+      document.getElementById('batch-cat-category').value = '';
+      document.getElementById('batch-cat-remark').value = '';
+      document.getElementById('batch-category-modal').classList.remove('hidden');
+    }
+
+    function closeBatchCategoryModal() {
+      document.getElementById('batch-category-modal').classList.add('hidden');
+    }
+
+    function handleBatchCatScopeChange(val) {
+      const manualBox = document.getElementById('batch-cat-manual-box');
+      if (val === 'manual') {
+        manualBox.classList.remove('hidden');
+      } else {
+        manualBox.classList.add('hidden');
+      }
+    }
+
+    async function confirmBatchCategory() {
+      const scope = document.getElementById('batch-cat-scope').value;
+      const category = document.getElementById('batch-cat-category').value.trim();
+      const remark = document.getElementById('batch-cat-remark').value.trim();
+
+      if (!category && !remark) {
+        alert("لطفاً حداقل نام دسته‌بندی یا یک ریمارک وارد کنید.");
+        return;
+      }
+
+      let identifiers = null;
+      let onlyUncategorized = false;
+
+      if (scope === 'manual') {
+        const raw = document.getElementById('batch-cat-manual-input').value;
+        identifiers = raw.split('\n').map(s => s.trim()).filter(Boolean);
+        if (identifiers.length === 0) {
+          alert("لطفاً حداقل یک شماره یا نام سشن وارد کنید.");
+          return;
+        }
+      } else if (scope === 'uncategorized') {
+        onlyUncategorized = true;
+      }
+
+      closeBatchCategoryModal();
+
+      try {
+        const res = await fetch('/api/sessions/source/batch-metadata', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            identifiers: identifiers,
+            only_uncategorized: onlyUncategorized,
+            category: category || null,
+            remark: remark || null
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert(`دسته‌بندی با موفقیت برای ${data.updated_count} سشن ثبت شد.`);
+          await loadCategories();
+          await loadSourceSessions();
+        } else {
+          alert("خطا در ثبت دسته‌بندی: " + (data.detail || JSON.stringify(data)));
+        }
+      } catch (e) {
+        alert("خطا در ارسال درخواست: " + e);
       }
     }
 

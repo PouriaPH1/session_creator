@@ -147,6 +147,28 @@ class MetadataService:
         self._write_json(self.target_meta_file, data)
         return entry
 
+    def batch_set_target_metadata(
+        self,
+        filenames: List[str],
+        category: Optional[str] = None,
+        remark: Optional[str] = None
+    ) -> int:
+        """Batch updates category and remark for target sessions."""
+        data = self._read_json(self.target_meta_file)
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        count = 0
+        for fn in filenames:
+            entry = data.get(fn, {})
+            if category is not None:
+                entry["category"] = category.strip()
+            if remark is not None:
+                entry["remark"] = remark.strip()
+            entry["updated_at"] = now_str
+            data[fn] = entry
+            count += 1
+        self._write_json(self.target_meta_file, data)
+        return count
+
     def record_target_creation(
         self,
         filename: str,

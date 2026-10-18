@@ -102,6 +102,20 @@ class UpdateTargetMetadataRequest(BaseModel):
     remark: Optional[str] = None
 
 
+class BatchUpdateSourceMetadataRequest(BaseModel):
+    identifiers: Optional[List[str]] = None
+    only_uncategorized: bool = False
+    category: Optional[str] = None
+    remark: Optional[str] = None
+
+
+class BatchUpdateTargetMetadataRequest(BaseModel):
+    filenames: Optional[List[str]] = None
+    only_uncategorized: bool = False
+    category: Optional[str] = None
+    remark: Optional[str] = None
+
+
 class AddProxyRequest(BaseModel):
     name: str
     url: str
@@ -214,6 +228,34 @@ async def update_source_metadata(req: UpdateSourceMetadataRequest):
         remark=req.remark
     )
     return {"status": "updated", "identifier": req.identifier, "metadata": updated}
+
+
+@app.post("/api/sessions/source/batch-metadata", summary="Batch update category and remark for source sessions")
+async def batch_update_source_metadata(req: BatchUpdateSourceMetadataRequest):
+    detailed = pool.get_detailed_sessions()
+    target_ids = []
+
+    if req.identifiers:
+        target_ids = req.identifiers
+    elif req.only_uncategorized:
+        for s in detailed:
+            cat = s.get("category", "")
+            if not cat or cat.strip() == "":
+                target_ids.append(s.get("phone") or s.get("session_name"))
+    else:
+        for s in detailed:
+            target_ids.append(s.get("phone") or s.get("session_name"))
+
+    updated_count = metadata_service.batch_set_source_metadata(
+        identifiers=target_ids,
+        category=req.category,
+        remark=req.remark
+    )
+    return {
+        "status": "success",
+        "updated_count": updated_count,
+        "total_targets": len(target_ids)
+    }
 
 
 @app.post("/api/sessions/upload", summary="Upload .session, .zip and .csv files")
@@ -377,6 +419,34 @@ async def update_target_metadata(req: UpdateTargetMetadataRequest):
         remark=req.remark
     )
     return {"status": "updated", "filename": req.filename, "metadata": updated}
+
+
+@app.post("/api/sessions/target/batch-metadata", summary="Batch update category and remark for target sessions")
+async def batch_update_target_metadata(req: BatchUpdateTargetMetadataRequest):
+    target_files = list(settings.target_sessions_dir.glob("*.session"))
+    target_fns = []
+
+    if req.filenames:
+        target_fns = req.filenames
+    elif req.only_uncategorized:
+        for f in target_files:
+            meta = metadata_service.get_target_metadata(f.name)
+            cat = meta.get("category", "")
+            if not cat or cat.strip() == "":
+                target_fns.append(f.name)
+    else:
+        target_fns = [f.name for f in target_files]
+
+    updated_count = metadata_service.batch_set_target_metadata(
+        filenames=target_fns,
+        category=req.category,
+        remark=req.remark
+    )
+    return {
+        "status": "success",
+        "updated_count": updated_count,
+        "total_targets": len(target_fns)
+    }
 
 
 @app.delete("/api/sessions/target-all", summary="Delete all generated target sessions")
