@@ -2,17 +2,25 @@ import struct
 import pytest
 from telethon.extensions import BinaryReader
 from telethon.tl.alltlobjects import tlobjects
-from telethon.tl.types import User
+from telethon.tl.types import User, Channel, ChannelFull, Message, MessageActionStarGiftUnique
 from telethon.tl.types.messages import Messages, MessagesSlice, ChannelMessages
 
 from core.telethon_patch import apply_telethon_patches
 
 
 def test_telethon_patch_registration():
-    """Verify that constructor 0x31774388 is registered in tlobjects."""
+    """Verify that constructors 0x31774388, 0x1c32b11c, etc. are registered in tlobjects."""
     apply_telethon_patches()
     assert 0x31774388 in tlobjects
     assert tlobjects[0x31774388] is User
+    assert 0x1c32b11c in tlobjects
+    assert tlobjects[0x1c32b11c] is Channel
+    assert 0xe4e0b29d in tlobjects
+    assert tlobjects[0xe4e0b29d] is ChannelFull
+    assert 0x95ef6f2b in tlobjects
+    assert tlobjects[0x95ef6f2b] is Message
+    assert 0xe6c31522 in tlobjects
+    assert tlobjects[0xe6c31522] is MessageActionStarGiftUnique
 
 
 def test_messages_resilient_to_unknown_user_constructor():
