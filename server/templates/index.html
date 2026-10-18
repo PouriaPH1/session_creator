@@ -2377,8 +2377,6 @@
       }
 
       // Prefill category and remark from source session
-      const cleanNoPlus = phone.trim().replace(/^\+/, '');
-      const withPlus = `+${cleanNoPlus}`;
       const srcObj = allSourceSessions.find(s => [s.phone, s.session_name].some(v => v && [phone.trim(), cleanNoPlus, withPlus].includes(v.trim())));
       if (document.getElementById('migrate-target-category')) {
         document.getElementById('migrate-target-category').value = srcObj?.category || '';
