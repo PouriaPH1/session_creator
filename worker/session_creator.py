@@ -176,6 +176,12 @@ class TelegramSessionCreator:
                 except Exception:
                     pass
             raise
+        finally:
+            if client.is_connected():
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
 
     async def create_batch_sessions(
         self,

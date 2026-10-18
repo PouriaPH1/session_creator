@@ -55,6 +55,7 @@ class MigrationJobManager:
         self.results: List[Dict] = []
         self.logs: List[str] = []
         self._lock = asyncio.Lock()
+        self._current_task: Optional[asyncio.Task] = None
 
     def get_status(self) -> Dict:
         return {
@@ -69,10 +70,24 @@ class MigrationJobManager:
 
     def reset(self) -> None:
         """Force resets job state if stuck."""
+        if self._current_task and not self._current_task.done():
+            self._current_task.cancel()
         self.is_running = False
         self.current_phone = None
         self.status_text = "آماده به کار"
         self._add_log("⚠️ وضعیت عملیات به صورت دستی بازنشانی (ریست) شد.")
+
+    async def stop(self) -> None:
+        """Gracefully cancels and awaits the migration background worker."""
+        if self._current_task and not self._current_task.done():
+            logger.info("Cancelling ongoing migration job...")
+            self._current_task.cancel()
+            try:
+                await self._current_task
+            except asyncio.CancelledError:
+                pass
+        self.is_running = False
+        self.current_phone = None
 
     def _add_log(self, message: str) -> None:
         now_str = datetime.datetime.now().strftime("%H:%M:%S")
@@ -100,7 +115,9 @@ class MigrationJobManager:
             self.logs = []
             self.current_phone = None
 
-        asyncio.create_task(self._run_batch_worker(phones, two_fa_passwords or {}, delay, proxy, skip_existing))
+        self._current_task = asyncio.create_task(
+            self._run_batch_worker(phones, two_fa_passwords or {}, delay, proxy, skip_existing)
+        )
         return True
 
     async def _run_batch_worker(
@@ -237,6 +254,10 @@ class MigrationJobManager:
 
             self._add_log("🎉 Batch migration finished!")
             self.status_text = "تکمیل شد"
+        except asyncio.CancelledError:
+            self._add_log("⚠️ عملیات ساخت سشن متوقف شد (Cancelled).")
+            logger.info("Batch migration task was cancelled.")
+            self.status_text = "متوقف شد"
         except Exception as e:
             self._add_log(f"💥 Fatal error during migration: {e}")
             logger.error(f"Fatal error in _run_batch_worker: {e}", exc_info=True)
@@ -244,3 +265,4 @@ class MigrationJobManager:
         finally:
             self.is_running = False
             self.current_phone = None
+            self._current_task = None

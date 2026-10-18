@@ -42,6 +42,7 @@ async def lifespan(app: FastAPI):
     await pool.start()
     yield
     logger.info("Stopping Master Telegram Session Manager...")
+    await migration_manager.stop()
     await pool.stop()
 
 
