@@ -180,8 +180,8 @@
             </div>
           </div>
 
-          <!-- Category Filter Pills & Search Input -->
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-slate-800/60">
+          <!-- Category Filter Pills, Category Select & Search Input -->
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1 border-t border-slate-800/60">
             <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs" id="source-filter-pills">
               <button onclick="filterSourceSessions('all')" id="pill-src-all" class="px-3 py-1.5 rounded-xl font-semibold bg-indigo-600 text-white shadow-sm transition shrink-0 flex items-center gap-1.5">
                 <span>همه سشن‌ها</span>
@@ -199,10 +199,16 @@
               </button>
             </div>
 
-            <!-- Search input -->
-            <div class="relative w-full sm:w-64">
-              <i class="ph-bold ph-magnifying-glass absolute right-3 top-2.5 text-slate-400 text-sm"></i>
-              <input type="text" id="src-search-input" oninput="handleSourceSearch(event)" placeholder="جستجوی شماره، نام یا مدل..." class="w-full bg-slate-900/80 border border-slate-800 rounded-xl pr-9 pl-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition">
+            <!-- Category filter and Search input -->
+            <div class="flex items-center gap-2 w-full md:w-auto">
+              <select id="src-category-filter" onchange="filterSourceCategory(this.value)" class="bg-slate-900/80 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-indigo-500 transition shrink-0">
+                <option value="">همه دسته‌ها</option>
+                <option value="__nocat__">بدون دسته</option>
+              </select>
+              <div class="relative w-full md:w-56">
+                <i class="ph-bold ph-magnifying-glass absolute right-3 top-2.5 text-slate-400 text-sm"></i>
+                <input type="text" id="src-search-input" oninput="handleSourceSearch(event)" placeholder="جستجو (شماره، دسته، ریمارک...)" class="w-full bg-slate-900/80 border border-slate-800 rounded-xl pr-9 pl-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition">
+              </div>
             </div>
           </div>
 
@@ -213,6 +219,7 @@
                 <tr>
                   <th class="p-3">شماره / نام سشن</th>
                   <th class="p-3">نام اکانت</th>
+                  <th class="p-3">دسته و ریمارک</th>
                   <th class="p-3">پروفایل دیوایس</th>
                   <th class="p-3">وضعیت</th>
                   <th class="p-3 text-center">عملیات مدیریتی</th>
@@ -220,7 +227,7 @@
               </thead>
               <tbody id="source-sessions-tbody" class="divide-y divide-slate-800/60 text-slate-300">
                 <tr>
-                  <td colspan="5" class="p-6 text-center text-slate-500">در حال بارگذاری سشن‌ها...</td>
+                  <td colspan="6" class="p-6 text-center text-slate-500">در حال بارگذاری سشن‌ها...</td>
                 </tr>
               </tbody>
             </table>
@@ -269,13 +276,25 @@
             <i class="ph-bold ph-upload-simple text-indigo-400"></i>
             آپلود سشن جدید و رمزها
           </h2>
-          <p class="text-xs text-slate-400">فایل‌های <code class="text-indigo-300 bg-indigo-500/10 px-1 py-0.5 rounded">.session</code> یا <code class="text-indigo-300 bg-indigo-500/10 px-1 py-0.5 rounded">.csv</code> را بکشید یا انتخاب کنید:</p>
+          <p class="text-xs text-slate-400">فایل‌های <code class="text-indigo-300 bg-indigo-500/10 px-1 py-0.5 rounded">.session</code>، <code class="text-indigo-300 bg-indigo-500/10 px-1 py-0.5 rounded">.zip</code> یا <code class="text-indigo-300 bg-indigo-500/10 px-1 py-0.5 rounded">.csv</code> را انتخاب یا رها کنید:</p>
 
-          <div id="drop-zone" onclick="document.getElementById('file-input').click()" class="border-2 border-dashed border-slate-700 hover:border-indigo-500/60 rounded-xl p-6 text-center cursor-pointer transition-all bg-slate-900/30">
+          <!-- Optional Category & Remark for Uploaded Sessions -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+            <div>
+              <label class="block text-slate-300 mb-1">دسته‌بندی (اختیاری):</label>
+              <input type="text" id="upload-category" list="category-datalist" placeholder="مثلاً: دسته ۱، اختصاصی..." class="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-3 py-1.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 text-xs">
+            </div>
+            <div>
+              <label class="block text-slate-300 mb-1">ریمارک / برچسب (اختیاری):</label>
+              <input type="text" id="upload-remark" placeholder="مثلاً: خرید ۲۵ مهر، ادمین..." class="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-3 py-1.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 text-xs">
+            </div>
+          </div>
+
+          <div id="drop-zone" onclick="document.getElementById('file-input').click()" class="border-2 border-dashed border-slate-700 hover:border-indigo-500/60 rounded-xl p-5 text-center cursor-pointer transition-all bg-slate-900/30 mt-2">
             <i class="ph-bold ph-cloud-arrow-up text-3xl text-indigo-400 mb-2"></i>
-            <p class="text-xs font-semibold text-slate-300">کلیک برای انتخاب فایل‌های سشن یا فایل CSV</p>
-            <p class="text-[11px] text-slate-500 mt-1">پشتیبانی از چندین فایل سشن و فایل اکسل/CSV هم‌زمان</p>
-            <input type="file" id="file-input" multiple accept=".session,.csv" class="hidden" onchange="handleFileUpload(event)">
+            <p class="text-xs font-semibold text-slate-300">کلیک برای انتخاب فایل‌های سشن، آرشیو ZIP یا فایل CSV</p>
+            <p class="text-[11px] text-slate-500 mt-1">پشتیبانی از فایل‌های فشرده ZIP حاوی .session و فایل اکسل/CSV رمزها</p>
+            <input type="file" id="file-input" multiple accept=".session,.zip,.csv" class="hidden" onchange="handleFileUpload(event)">
           </div>
         </div>
 
@@ -298,22 +317,28 @@
             </div>
           </div>
 
-          <!-- Category Filter Pills -->
-          <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs" id="target-filter-pills">
-            <button onclick="filterTargetSessions('all')" id="pill-filter-all" class="px-3 py-1 rounded-lg font-semibold bg-indigo-600 text-white shadow-sm transition shrink-0 flex items-center gap-1.5">
-              <span>همه</span>
-              <span id="count-target-all" class="bg-indigo-700/60 px-1.5 py-0.2 rounded-full text-[10px]">۰</span>
-            </button>
-            <button onclick="filterTargetSessions('direct')" id="pill-filter-direct" class="px-3 py-1 rounded-lg font-semibold bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800 transition shrink-0 flex items-center gap-1.5">
-              <i class="ph-bold ph-hard-drive text-sky-400"></i>
-              <span>مستقیم سرور</span>
-              <span id="count-target-direct" class="bg-slate-800 px-1.5 py-0.2 rounded-full text-[10px] text-sky-300">۰</span>
-            </button>
-            <button onclick="filterTargetSessions('proxy')" id="pill-filter-proxy" class="px-3 py-1 rounded-lg font-semibold bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800 transition shrink-0 flex items-center gap-1.5">
-              <i class="ph-bold ph-globe text-purple-400"></i>
-              <span>با پروکسی</span>
-              <span id="count-target-proxy" class="bg-slate-800 px-1.5 py-0.2 rounded-full text-[10px] text-purple-300">۰</span>
-            </button>
+          <!-- Type Filter Pills & Category Select -->
+          <div class="flex items-center justify-between gap-2 overflow-x-auto pb-1 text-xs" id="target-filter-bar">
+            <div class="flex items-center gap-1.5 shrink-0" id="target-filter-pills">
+              <button onclick="filterTargetSessions('all')" id="pill-filter-all" class="px-3 py-1 rounded-lg font-semibold bg-indigo-600 text-white shadow-sm transition shrink-0 flex items-center gap-1.5">
+                <span>همه</span>
+                <span id="count-target-all" class="bg-indigo-700/60 px-1.5 py-0.2 rounded-full text-[10px]">۰</span>
+              </button>
+              <button onclick="filterTargetSessions('direct')" id="pill-filter-direct" class="px-3 py-1 rounded-lg font-semibold bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800 transition shrink-0 flex items-center gap-1.5">
+                <i class="ph-bold ph-hard-drive text-sky-400"></i>
+                <span>مستقیم سرور</span>
+                <span id="count-target-direct" class="bg-slate-800 px-1.5 py-0.2 rounded-full text-[10px] text-sky-300">۰</span>
+              </button>
+              <button onclick="filterTargetSessions('proxy')" id="pill-filter-proxy" class="px-3 py-1 rounded-lg font-semibold bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800 transition shrink-0 flex items-center gap-1.5">
+                <i class="ph-bold ph-globe text-purple-400"></i>
+                <span>با پروکسی</span>
+                <span id="count-target-proxy" class="bg-slate-800 px-1.5 py-0.2 rounded-full text-[10px] text-purple-300">۰</span>
+              </button>
+            </div>
+            <select id="target-category-filter" onchange="filterTargetCategory(this.value)" class="bg-slate-900/80 border border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-indigo-500 transition shrink-0">
+              <option value="">همه دسته‌ها</option>
+              <option value="__nocat__">بدون دسته</option>
+            </select>
           </div>
 
           <div id="target-sessions-list" class="space-y-2 max-h-80 overflow-y-auto pr-1">
@@ -626,6 +651,17 @@
           </div>
         </div>
 
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-slate-300 mb-1">دسته‌بندی مقصد:</label>
+            <input type="text" id="migrate-target-category" list="category-datalist" placeholder="پیش‌فرض: مبدأ" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs focus:outline-none focus:border-emerald-500">
+          </div>
+          <div>
+            <label class="block text-slate-300 mb-1">ریمارک مقصد:</label>
+            <input type="text" id="migrate-target-remark" placeholder="پیش‌فرض: مبدأ" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs focus:outline-none focus:border-emerald-500">
+          </div>
+        </div>
+
         <button onclick="confirmSingleMigrate()" class="w-full py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/30">
           <i class="ph-bold ph-play"></i>
           شروع ساخت سشن
@@ -687,6 +723,17 @@
           <p class="text-[10px] text-slate-400 mt-1">پیشنهاد می‌شود جهت امنیت اکانت‌ها حداقل ۱۰ تا ۱۵ ثانیه باشد.</p>
         </div>
 
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-slate-300 mb-1">دسته‌بندی سشن‌های مقصد:</label>
+            <input type="text" id="batch-migrate-category" list="category-datalist" placeholder="پیش‌فرض: دسته‌بندی مبدأ" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="block text-slate-300 mb-1">ریمارک سشن‌های مقصد:</label>
+            <input type="text" id="batch-migrate-remark" placeholder="پیش‌فرض: ریمارک مبدأ" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs focus:outline-none focus:border-indigo-500">
+          </div>
+        </div>
+
         <button id="batch-migrate-submit-btn" onclick="confirmBatchMigrate()" class="w-full py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/30">
           <i class="ph-bold ph-play"></i>
           شروع ساخت تمام سشن‌ها
@@ -695,18 +742,99 @@
     </div>
   </div>
 
+  <!-- Shared Datalist for Category Autocomplete -->
+  <datalist id="category-datalist"></datalist>
+
+  <!-- Edit Metadata Modal (Category & Remark) -->
+  <div id="edit-metadata-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass rounded-2xl max-w-sm w-full p-6 space-y-4 border border-indigo-500/40 animate-in fade-in zoom-in-95 duration-200">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i class="ph-bold ph-tag text-indigo-400 text-lg"></i>
+          ویرایش دسته‌بندی و ریمارک
+        </h3>
+        <button onclick="closeEditMetadataModal()" class="text-slate-400 hover:text-white transition">
+          <i class="ph-bold ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <input type="hidden" id="edit-meta-type">
+      <input type="hidden" id="edit-meta-identifier">
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <span class="text-slate-400 block mb-1">سشن انتخابی:</span>
+          <span id="edit-meta-label" class="font-mono text-indigo-300 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800 font-bold block truncate"></span>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 mb-1">دسته‌بندی (Category):</label>
+          <input type="text" id="edit-meta-category" list="category-datalist" placeholder="مثلاً: دسته ۱، اکانت‌های ایران..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-xs">
+        </div>
+
+        <div>
+          <label class="block text-slate-300 mb-1">ریمارک / یادداشت (Remark):</label>
+          <input type="text" id="edit-meta-remark" placeholder="مثلاً: خرید ۲۵ مهر، ادمین الف..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-xs">
+        </div>
+
+        <button onclick="saveEditMetadata()" class="w-full py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/30">
+          <i class="ph-bold ph-check"></i>
+          ذخیره تغییرات
+        </button>
+      </div>
+  </div>
+
   <script>
     let pollInterval = null;
 
     async function initDashboard() {
       await Promise.all([
         loadStats(),
+        loadCategories(),
         loadSourceSessions(),
         loadTargetSessions(),
         checkMigrationStatus(),
         loadProxies()
       ]);
       setInterval(checkMigrationStatus, 3000);
+    }
+
+    let allCategories = [];
+    async function loadCategories() {
+      try {
+        const res = await fetch('/api/categories');
+        const data = await res.json();
+        allCategories = data.categories || [];
+
+        const datalist = document.getElementById('category-datalist');
+        if (datalist) {
+          datalist.innerHTML = allCategories.map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
+        }
+
+        const srcSelect = document.getElementById('src-category-filter');
+        if (srcSelect) {
+          const curVal = srcSelect.value;
+          let html = '<option value="">همه دسته‌ها</option><option value="__nocat__">بدون دسته</option>';
+          allCategories.forEach(c => {
+            html += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
+          });
+          srcSelect.innerHTML = html;
+          srcSelect.value = curVal;
+        }
+
+        const tgtSelect = document.getElementById('target-category-filter');
+        if (tgtSelect) {
+          const curVal = tgtSelect.value;
+          let html = '<option value="">همه دسته‌ها</option><option value="__nocat__">بدون دسته</option>';
+          allCategories.forEach(c => {
+            html += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
+          });
+          tgtSelect.innerHTML = html;
+          tgtSelect.value = curVal;
+        }
+      } catch (e) {
+        console.error("Error loading categories:", e);
+      }
     }
 
     async function loadStats() {
@@ -722,9 +850,16 @@
 
     let allSourceSessions = [];
     let currentSourceFilter = 'all'; // 'all', 'healthy', 'faulty'
+    let currentSourceCategory = '';
     let currentSourceSearch = '';
     let currentSourcePage = 1;
     let sourcePageSize = 10;
+
+    function filterSourceCategory(cat) {
+      currentSourceCategory = cat;
+      currentSourcePage = 1;
+      renderSourceSessions();
+    }
 
     async function loadSourceSessions() {
       try {
@@ -799,6 +934,15 @@
           if (item.is_authorized && item.status === 'active') return false;
         }
 
+        // Category filter
+        if (currentSourceCategory) {
+          if (currentSourceCategory === '__nocat__') {
+            if (item.category && item.category.trim() !== '') return false;
+          } else {
+            if ((item.category || '').trim() !== currentSourceCategory) return false;
+          }
+        }
+
         // Search query
         if (currentSourceSearch) {
           const ph = (item.phone || '').toLowerCase();
@@ -806,7 +950,9 @@
           const fn = (item.first_name || '').toLowerCase();
           const un = (item.username || '').toLowerCase();
           const dm = (item.device_model || '').toLowerCase();
-          if (!ph.includes(currentSourceSearch) && !sn.includes(currentSourceSearch) && !fn.includes(currentSourceSearch) && !un.includes(currentSourceSearch) && !dm.includes(currentSourceSearch)) {
+          const cat = (item.category || '').toLowerCase();
+          const rem = (item.remark || '').toLowerCase();
+          if (!ph.includes(currentSourceSearch) && !sn.includes(currentSourceSearch) && !fn.includes(currentSourceSearch) && !un.includes(currentSourceSearch) && !dm.includes(currentSourceSearch) && !cat.includes(currentSourceSearch) && !rem.includes(currentSourceSearch)) {
             return false;
           }
         }
@@ -836,7 +982,7 @@
       renderSourcePaginationButtons(totalPages);
 
       if (totalFiltered === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500">
+        tbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-slate-500">
           <i class="ph-bold ph-tray text-3xl mb-1 text-slate-600 block"></i>
           هیچ سشنی در این دسته‌بندی یافت نشد.
         </td></tr>`;
@@ -862,6 +1008,25 @@
             <td class="p-3">
               <span class="font-semibold text-white">${item.first_name || 'بدون نام'}</span>
               ${item.username ? `<p class="text-[10px] text-indigo-400 font-mono">@${item.username}</p>` : ''}
+            </td>
+            <td class="p-3">
+              <div class="flex items-center gap-1.5 flex-wrap">
+                ${item.category ? `
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                    <i class="ph-bold ph-tag text-[9px]"></i>
+                    ${escapeHtml(item.category)}
+                  </span>
+                ` : `<span class="text-slate-500 text-[10px]">-</span>`}
+                <button onclick="openEditMetadataModal('source', '${escapeHtml(item.phone || item.session_name)}', '${escapeHtml(item.category || '')}', '${escapeHtml(item.remark || '')}')" title="ویرایش دسته‌بندی و ریمارک" class="text-slate-500 hover:text-indigo-400 p-0.5 transition">
+                  <i class="ph-bold ph-pencil-simple text-xs"></i>
+                </button>
+              </div>
+              ${item.remark ? `
+                <div class="text-[10px] text-slate-400 mt-1 flex items-center gap-1 truncate max-w-[150px]" title="${escapeHtml(item.remark)}">
+                  <i class="ph-bold ph-note text-amber-400 text-[10px] shrink-0"></i>
+                  <span class="truncate">${escapeHtml(item.remark)}</span>
+                </div>
+              ` : ''}
             </td>
             <td class="p-3 text-slate-400 text-[11px]">${item.device_model || '-'}</td>
             <td class="p-3">
@@ -956,6 +1121,12 @@
 
     let allTargetSessions = [];
     let currentTargetFilter = 'all';
+    let currentTargetCategory = '';
+
+    function filterTargetCategory(cat) {
+      currentTargetCategory = cat;
+      renderTargetSessions(currentTargetFilter);
+    }
 
     async function loadTargetSessions() {
       try {
@@ -1013,6 +1184,14 @@
         filtered = allTargetSessions.filter(s => s.created_via === 'proxy');
       }
 
+      if (currentTargetCategory) {
+        if (currentTargetCategory === '__nocat__') {
+          filtered = filtered.filter(s => !s.category || s.category.trim() === '');
+        } else {
+          filtered = filtered.filter(s => (s.category || '').trim() === currentTargetCategory);
+        }
+      }
+
       if (filtered.length === 0) {
         container.innerHTML = `<div class="text-center p-6 text-xs text-slate-500">هیچ سشنی در این دسته‌بندی وجود ندارد.</div>`;
         return;
@@ -1041,7 +1220,19 @@
                 <div class="flex items-center gap-1.5 flex-wrap">
                   <span class="font-mono font-bold text-slate-200 text-xs truncate">${item.filename}</span>
                   ${badgeHtml}
+                  ${item.category ? `
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                      <i class="ph-bold ph-tag text-[9px]"></i>
+                      ${escapeHtml(item.category)}
+                    </span>
+                  ` : ''}
                 </div>
+                ${item.remark ? `
+                  <div class="text-[10px] text-slate-400 flex items-center gap-1 truncate max-w-[200px]" title="${escapeHtml(item.remark)}">
+                    <i class="ph-bold ph-note text-amber-400 text-[10px] shrink-0"></i>
+                    <span class="truncate">${escapeHtml(item.remark)}</span>
+                  </div>
+                ` : ''}
                 <div class="text-[10px] text-slate-400 flex items-center gap-1.5 font-mono">
                   <span>${item.size_kb} KB</span>
                   <span>•</span>
@@ -1050,6 +1241,9 @@
               </div>
             </div>
             <div class="flex items-center gap-1 shrink-0">
+              <button onclick="openEditMetadataModal('target', '${escapeHtml(item.filename)}', '${escapeHtml(item.category || '')}', '${escapeHtml(item.remark || '')}')" title="ویرایش دسته‌بندی و ریمارک" class="p-1.5 rounded-lg bg-indigo-600/15 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition flex items-center justify-center">
+                <i class="ph-bold ph-pencil-simple text-xs"></i>
+              </button>
               <a href="/api/download/target/${encodeURIComponent(item.filename)}" title="دانلود سشن" class="p-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition flex items-center justify-center">
                 <i class="ph-bold ph-download-simple text-xs"></i>
               </a>
@@ -1060,6 +1254,51 @@
           </div>
         `;
       }).join('');
+    }
+
+    function openEditMetadataModal(type, identifier, category, remark) {
+      document.getElementById('edit-meta-type').value = type;
+      document.getElementById('edit-meta-identifier').value = identifier;
+      document.getElementById('edit-meta-label').innerText = identifier;
+      document.getElementById('edit-meta-category').value = category || '';
+      document.getElementById('edit-meta-remark').value = remark || '';
+      document.getElementById('edit-metadata-modal').classList.remove('hidden');
+    }
+
+    function closeEditMetadataModal() {
+      document.getElementById('edit-metadata-modal').classList.add('hidden');
+    }
+
+    async function saveEditMetadata() {
+      const type = document.getElementById('edit-meta-type').value;
+      const identifier = document.getElementById('edit-meta-identifier').value;
+      const category = document.getElementById('edit-meta-category').value.trim();
+      const remark = document.getElementById('edit-meta-remark').value.trim();
+
+      closeEditMetadataModal();
+
+      try {
+        const url = type === 'source' ? '/api/sessions/source/metadata' : '/api/sessions/target/metadata';
+        const body = type === 'source' ? { identifier, category, remark } : { filename: identifier, category, remark };
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (res.ok) {
+          await loadCategories();
+          if (type === 'source') {
+            await loadSourceSessions();
+          } else {
+            await loadTargetSessions();
+          }
+        } else {
+          const data = await res.json();
+          alert("خطا در ذخیره مشخصات: " + (data.detail || JSON.stringify(data)));
+        }
+      } catch (err) {
+        alert("خطا در برقراری ارتباط: " + err);
+      }
     }
 
     async function deleteTargetSession(filename) {
@@ -1116,6 +1355,11 @@
         formData.append("files", files[i]);
       }
 
+      const catVal = (document.getElementById('upload-category')?.value || '').trim();
+      const remVal = (document.getElementById('upload-remark')?.value || '').trim();
+      if (catVal) formData.append("category", catVal);
+      if (remVal) formData.append("remark", remVal);
+
       try {
         const res = await fetch('/api/sessions/upload', {
           method: 'POST',
@@ -1127,7 +1371,12 @@
           if (data.csv_passwords_imported > 0) {
             msg += `\nهمچنین ${data.csv_passwords_imported} رمز عبور دو مرحله‌ای (2FA) از فایل CSV وارد شد.`;
           }
+          if (catVal || remVal) {
+            msg += `\nدسته‌بندی/ریمارک به سشن‌های جدید اختصاص یافت.`;
+          }
           alert(msg);
+          if (document.getElementById('upload-category')) document.getElementById('upload-category').value = '';
+          if (document.getElementById('upload-remark')) document.getElementById('upload-remark').value = '';
           await initDashboard();
         } else {
           alert("خطا در آپلود: " + data.detail);
@@ -1589,6 +1838,8 @@
       const delay = parseFloat(document.getElementById('batch-migrate-delay').value) || 15;
       const proxy = document.getElementById('batch-migrate-proxy-select').value;
       const skipExisting = document.getElementById('batch-migrate-skip-existing').checked;
+      const category = (document.getElementById('batch-migrate-category')?.value || '').trim();
+      const remark = (document.getElementById('batch-migrate-remark')?.value || '').trim();
 
       closeBatchMigrateModal();
 
@@ -1599,7 +1850,9 @@
           body: JSON.stringify({
             delay: delay,
             proxy: proxy || null,
-            skip_existing: skipExisting
+            skip_existing: skipExisting,
+            category: category || null,
+            remark: remark || null
           })
         });
         const data = await res.json();
@@ -1984,6 +2237,17 @@
       } catch (err) {
         console.warn("Could not auto-fetch 2FA password:", err);
       }
+
+      // Prefill category and remark from source session
+      const cleanNoPlus = phone.trim().replace(/^\+/, '');
+      const withPlus = `+${cleanNoPlus}`;
+      const srcObj = allSourceSessions.find(s => [s.phone, s.session_name].some(v => v && [phone.trim(), cleanNoPlus, withPlus].includes(v.trim())));
+      if (document.getElementById('migrate-target-category')) {
+        document.getElementById('migrate-target-category').value = srcObj?.category || '';
+      }
+      if (document.getElementById('migrate-target-remark')) {
+        document.getElementById('migrate-target-remark').value = srcObj?.remark || '';
+      }
     }
 
     function closeSingleMigrateModal() {
@@ -1994,6 +2258,8 @@
       const phone = document.getElementById('migrate-target-phone').value;
       const pwd = document.getElementById('migrate-target-password').value.trim();
       const proxy = document.getElementById('migrate-proxy-select').value;
+      const category = (document.getElementById('migrate-target-category')?.value || '').trim();
+      const remark = (document.getElementById('migrate-target-remark')?.value || '').trim();
 
       closeSingleMigrateModal();
 
@@ -2004,7 +2270,9 @@
           body: JSON.stringify({
             phone: phone,
             password: pwd || null,
-            proxy: proxy || null
+            proxy: proxy || null,
+            category: category || null,
+            remark: remark || null
           })
         });
         const data = await res.json();

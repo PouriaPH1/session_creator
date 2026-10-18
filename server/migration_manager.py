@@ -43,9 +43,10 @@ class MigrationJobManager:
     Manages background migration jobs triggered from the Web Admin Panel.
     """
 
-    def __init__(self, settings: Settings, otp_service: IOTPService):
+    def __init__(self, settings: Settings, otp_service: IOTPService, metadata_service: Optional[object] = None):
         self.settings = settings
         self.otp_service = otp_service
+        self.metadata_service = metadata_service
         self.local_otp_client = LocalOTPClient(otp_service)
         self.is_running = False
         self.status_text = "آماده به کار"
@@ -101,7 +102,9 @@ class MigrationJobManager:
         two_fa_passwords: Optional[Dict[str, str]] = None,
         delay: float = 15.0,
         proxy: Optional[str] = None,
-        skip_existing: bool = False
+        skip_existing: bool = False,
+        category: Optional[str] = None,
+        remark: Optional[str] = None
     ) -> bool:
         """Starts batch migration in the background."""
         async with self._lock:
@@ -116,7 +119,7 @@ class MigrationJobManager:
             self.current_phone = None
 
         self._current_task = asyncio.create_task(
-            self._run_batch_worker(phones, two_fa_passwords or {}, delay, proxy, skip_existing)
+            self._run_batch_worker(phones, two_fa_passwords or {}, delay, proxy, skip_existing, category, remark)
         )
         return True
 
@@ -126,7 +129,9 @@ class MigrationJobManager:
         passwords: Dict[str, str],
         delay: float,
         proxy: Optional[str] = None,
-        skip_existing: bool = False
+        skip_existing: bool = False,
+        category: Optional[str] = None,
+        remark: Optional[str] = None
     ) -> None:
         try:
             from server.proxy_service import parse_telethon_proxy
@@ -205,28 +210,51 @@ class MigrationJobManager:
                         except Exception:
                             pass
 
-                    # Record metadata in storage/target_sessions_metadata.json
-                    meta_file = self.settings.base_dir / "storage" / "target_sessions_metadata.json"
-                    try:
-                        import json
-                        meta_data = {}
-                        if meta_file.exists():
-                            try:
-                                meta_data = json.loads(meta_file.read_text(encoding="utf-8"))
-                            except Exception:
-                                meta_data = {}
-                        meta_data[target_file.name] = {
-                            "phone": phone,
-                            "session_name": target_file.stem,
-                            "created_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                            "created_via": "proxy" if proxy else "direct",
-                            "proxy_name": proxy_name,
-                            "proxy_ip": proxy_ip,
-                            "proxy_url": proxy
-                        }
-                        meta_file.write_text(json.dumps(meta_data, ensure_ascii=False, indent=2), encoding="utf-8")
-                    except Exception as meta_err:
-                        logger.warning(f"Failed to save target session metadata: {meta_err}")
+                    # Determine category and remark (inherit from source session if not explicitly set)
+                    tgt_cat = category
+                    tgt_rem = remark
+                    if self.metadata_service:
+                        src_meta = self.metadata_service.get_source_metadata(phone)
+                        if not tgt_cat:
+                            tgt_cat = src_meta.get("category", "")
+                        if not tgt_rem:
+                            tgt_rem = src_meta.get("remark", "")
+
+                    if self.metadata_service:
+                        self.metadata_service.record_target_creation(
+                            filename=target_file.name,
+                            phone=phone,
+                            created_via="proxy" if proxy else "direct",
+                            proxy_name=proxy_name,
+                            proxy_ip=proxy_ip,
+                            proxy_url=proxy,
+                            category=tgt_cat,
+                            remark=tgt_rem
+                        )
+                    else:
+                        meta_file = self.settings.base_dir / "storage" / "target_sessions_metadata.json"
+                        try:
+                            import json
+                            meta_data = {}
+                            if meta_file.exists():
+                                try:
+                                    meta_data = json.loads(meta_file.read_text(encoding="utf-8"))
+                                except Exception:
+                                    meta_data = {}
+                            meta_data[target_file.name] = {
+                                "phone": phone,
+                                "session_name": target_file.stem,
+                                "created_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "created_via": "proxy" if proxy else "direct",
+                                "proxy_name": proxy_name,
+                                "proxy_ip": proxy_ip,
+                                "proxy_url": proxy,
+                                "category": (tgt_cat or "").strip(),
+                                "remark": (tgt_rem or "").strip()
+                            }
+                            meta_file.write_text(json.dumps(meta_data, ensure_ascii=False, indent=2), encoding="utf-8")
+                        except Exception as meta_err:
+                            logger.warning(f"Failed to save target session metadata: {meta_err}")
 
                     self.results.append({
                         "phone": phone,

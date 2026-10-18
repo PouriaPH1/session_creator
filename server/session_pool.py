@@ -18,8 +18,9 @@ class TelethonSessionPool(ISessionPool):
     Implements Object Pool and Repository patterns.
     """
 
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, metadata_service: Optional[object] = None):
         self.settings = settings
+        self.metadata_service = metadata_service
         # Map identifier (phone or filename stem) -> TelegramClient
         self._clients: Dict[str, TelegramClient] = {}
         # Keep track of active phone numbers
@@ -163,7 +164,18 @@ class TelethonSessionPool(ISessionPool):
 
     def get_detailed_sessions(self) -> List[dict]:
         """Returns list of all session metadata dictionaries."""
-        return list(self._session_info.values())
+        sessions = []
+        for info in self._session_info.values():
+            s = dict(info)
+            if self.metadata_service:
+                meta = self.metadata_service.get_source_metadata(s.get("phone") or s.get("session_name"))
+                s["category"] = meta.get("category", "")
+                s["remark"] = meta.get("remark", "")
+            else:
+                s["category"] = ""
+                s["remark"] = ""
+            sessions.append(s)
+        return sessions
 
     async def reload(self) -> None:
         """Reload sessions from directory."""

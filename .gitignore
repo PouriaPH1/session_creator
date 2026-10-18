@@ -15,6 +15,7 @@ storage/target_sessions/*
 storage/passwords.json
 storage/proxies.json
 storage/target_sessions_metadata.json
+storage/source_sessions_metadata.json
 storage/*.csv
 storage/active_port.txt
 !storage/source_sessions/.gitkeep

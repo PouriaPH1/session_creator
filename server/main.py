@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List, Optional
 import zipfile
 
-from fastapi import FastAPI, File, HTTPException, Query, Response, UploadFile, status
+from fastapi import FastAPI, File, Form, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
@@ -14,6 +14,7 @@ from config.settings import get_settings
 from core.exceptions import OTPNotFoundError, SessionNotFoundError
 from core.telethon_patch import apply_telethon_patches
 from server.account_service import AccountManagementService
+from server.metadata_service import MetadataService
 from server.migration_manager import MigrationJobManager
 from server.otp_service import TelethonOTPService
 from server.proxy_service import ProxyService
@@ -29,9 +30,10 @@ logging.basicConfig(
 logger = logging.getLogger("master_server")
 
 settings = get_settings()
-pool = TelethonSessionPool(settings)
+metadata_service = MetadataService(settings)
+pool = TelethonSessionPool(settings, metadata_service)
 otp_service = TelethonOTPService(pool)
-migration_manager = MigrationJobManager(settings, otp_service)
+migration_manager = MigrationJobManager(settings, otp_service, metadata_service)
 account_service = AccountManagementService(pool, settings)
 proxy_service = ProxyService(settings)
 
@@ -76,12 +78,28 @@ class SingleMigrateRequest(BaseModel):
     phone: str
     password: Optional[str] = None
     proxy: Optional[str] = None
+    category: Optional[str] = None
+    remark: Optional[str] = None
 
 
 class BatchMigrateRequest(BaseModel):
     delay: float = 15.0
     proxy: Optional[str] = None
     skip_existing: bool = True
+    category: Optional[str] = None
+    remark: Optional[str] = None
+
+
+class UpdateSourceMetadataRequest(BaseModel):
+    identifier: str
+    category: Optional[str] = None
+    remark: Optional[str] = None
+
+
+class UpdateTargetMetadataRequest(BaseModel):
+    filename: str
+    category: Optional[str] = None
+    remark: Optional[str] = None
 
 
 class AddProxyRequest(BaseModel):
@@ -181,20 +199,65 @@ async def list_source_sessions():
     return pool.get_detailed_sessions()
 
 
-@app.post("/api/sessions/upload", summary="Upload .session and .csv files")
-async def upload_sessions(files: List[UploadFile] = File(...)):
+@app.get("/api/categories", summary="Get distinct categories across sessions")
+async def get_categories():
+    return {
+        "categories": metadata_service.get_all_categories()
+    }
+
+
+@app.post("/api/sessions/source/metadata", summary="Update category and remark for a source session")
+async def update_source_metadata(req: UpdateSourceMetadataRequest):
+    updated = metadata_service.set_source_metadata(
+        identifier=req.identifier,
+        category=req.category,
+        remark=req.remark
+    )
+    return {"status": "updated", "identifier": req.identifier, "metadata": updated}
+
+
+@app.post("/api/sessions/upload", summary="Upload .session, .zip and .csv files")
+async def upload_sessions(
+    files: List[UploadFile] = File(...),
+    category: Optional[str] = Form(None),
+    remark: Optional[str] = Form(None)
+):
     saved_count = 0
     csv_count = 0
+    uploaded_identifiers = []
     for file in files:
         if file.filename.endswith(".session"):
             dest_path = settings.source_sessions_dir / file.filename
             content = await file.read()
             dest_path.write_bytes(content)
             saved_count += 1
+            uploaded_identifiers.append(file.filename)
+            uploaded_identifiers.append(Path(file.filename).stem)
+        elif file.filename.endswith(".zip"):
+            content = await file.read()
+            try:
+                with zipfile.ZipFile(io.BytesIO(content)) as z:
+                    for member in z.namelist():
+                        if member.endswith(".session") and not member.startswith("__MACOSX"):
+                            s_name = Path(member).name
+                            (settings.source_sessions_dir / s_name).write_bytes(z.read(member))
+                            saved_count += 1
+                            uploaded_identifiers.append(s_name)
+                            uploaded_identifiers.append(Path(s_name).stem)
+            except Exception as e:
+                logger.warning(f"Error extracting zip archive {file.filename}: {e}")
         elif file.filename.endswith(".csv"):
             content = await file.read()
             csv_text = content.decode("utf-8-sig", errors="ignore")
             csv_count += account_service.import_passwords_csv(csv_text)
+
+    # Save category and remark for newly uploaded sessions if provided
+    if (category or remark) and uploaded_identifiers:
+        metadata_service.batch_set_source_metadata(
+            identifiers=uploaded_identifiers,
+            category=category,
+            remark=remark
+        )
 
     # Reload pool after upload
     await pool.reload()
@@ -281,6 +344,16 @@ async def list_target_sessions():
             proxy_name = "پروکسی" if created_via == "proxy" else "مستقیم (سرور اول)"
         proxy_ip = meta.get("proxy_ip") or meta.get("proxy") or ("آی‌پی سرور اول" if created_via == "direct" else "-")
 
+        # Category and remark: fallback to source session if not set on target
+        category = meta.get("category", "")
+        remark = meta.get("remark", "")
+        if not category or not remark:
+            src_meta = metadata_service.get_source_metadata(meta.get("phone", f.stem))
+            if not category:
+                category = src_meta.get("category", "")
+            if not remark:
+                remark = src_meta.get("remark", "")
+
         results.append({
             "filename": f.name,
             "phone": meta.get("phone", f.stem),
@@ -289,9 +362,21 @@ async def list_target_sessions():
             "created_via": created_via,
             "proxy_name": proxy_name,
             "proxy_ip": proxy_ip,
-            "proxy_url": meta.get("proxy_url")
+            "proxy_url": meta.get("proxy_url"),
+            "category": category,
+            "remark": remark
         })
     return sorted(results, key=lambda x: x["created_at"], reverse=True)
+
+
+@app.post("/api/sessions/target/metadata", summary="Update category and remark for a target session")
+async def update_target_metadata(req: UpdateTargetMetadataRequest):
+    updated = metadata_service.set_target_metadata(
+        filename=req.filename,
+        category=req.category,
+        remark=req.remark
+    )
+    return {"status": "updated", "filename": req.filename, "metadata": updated}
 
 
 @app.delete("/api/sessions/target-all", summary="Delete all generated target sessions")
@@ -443,7 +528,10 @@ async def migrate_single(req: SingleMigrateRequest):
         [req.phone],
         passwords,
         delay=0.0,
-        proxy=effective_proxy
+        proxy=effective_proxy,
+        skip_existing=False,
+        category=req.category,
+        remark=req.remark
     )
     if not started:
         raise HTTPException(status_code=400, detail="Failed to start migration job.")
@@ -531,7 +619,9 @@ async def migrate_batch(req: BatchMigrateRequest):
         two_fa_passwords=passwords_dict,
         delay=req.delay,
         proxy=effective_proxy,
-        skip_existing=req.skip_existing
+        skip_existing=req.skip_existing,
+        category=req.category,
+        remark=req.remark
     )
     if not started:
         raise HTTPException(status_code=400, detail="Failed to start migration job.")
