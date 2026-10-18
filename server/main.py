@@ -1,9 +1,12 @@
 import datetime
 import io
+import json
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+import re
 from typing import List, Optional
+import urllib.parse
 import zipfile
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Response, UploadFile, status
@@ -507,24 +510,102 @@ async def download_target_session(filename: str):
     )
 
 
-@app.get("/api/download/target-all-zip", summary="Download all target sessions in a zip archive")
-async def download_all_target_zip():
+@app.get("/api/download/target-all-zip", summary="Download target sessions in a zip archive with optional filters")
+@app.get("/api/download/target-zip", summary="Download target sessions in a zip archive with optional filters")
+async def download_all_target_zip(
+    category: Optional[str] = Query(default=None, description="Filter by category (use '__nocat__' for uncategorized)"),
+    remark: Optional[str] = Query(default=None, description="Filter by remark substring"),
+    created_via: Optional[str] = Query(default=None, description="Filter by creation type: direct or proxy")
+):
     target_files = list(settings.target_sessions_dir.glob("*.session"))
     if not target_files:
-        raise HTTPException(status_code=404, detail="No target sessions found to download.")
+        raise HTTPException(status_code=404, detail="هیچ سشن مقصدی در سرور یافت نشد.")
+
+    meta_file = settings.base_dir / "storage" / "target_sessions_metadata.json"
+    metadata_map = {}
+    if meta_file.exists():
+        try:
+            metadata_map = json.loads(meta_file.read_text(encoding="utf-8"))
+        except Exception:
+            metadata_map = {}
+
+    cat_filter = category.strip() if category is not None and category.strip() != "" else None
+    rem_filter = remark.strip().lower() if remark is not None and remark.strip() != "" else None
+    via_filter = created_via.strip().lower() if created_via is not None and created_via.strip() != "" else None
+
+    filtered_files = []
+    for f in target_files:
+        meta = metadata_map.get(f.name, {})
+        # Extract category and remark with fallback to source session
+        item_cat = (meta.get("category") or "").strip()
+        item_rem = (meta.get("remark") or "").strip()
+        if not item_cat or not item_rem:
+            src_meta = metadata_service.get_source_metadata(meta.get("phone", f.stem))
+            if not item_cat:
+                item_cat = (src_meta.get("category") or "").strip()
+            if not item_rem:
+                item_rem = (src_meta.get("remark") or "").strip()
+
+        item_via = (meta.get("created_via") or "direct").strip().lower()
+
+        # Category filter check
+        if cat_filter is not None:
+            if cat_filter == "__nocat__":
+                if item_cat != "":
+                    continue
+            else:
+                if item_cat != cat_filter:
+                    continue
+
+        # Remark filter check (case-insensitive substring match)
+        if rem_filter is not None:
+            if rem_filter not in item_rem.lower():
+                continue
+
+        # Created via filter check
+        if via_filter is not None:
+            if item_via != via_filter:
+                continue
+
+        filtered_files.append(f)
+
+    if not filtered_files:
+        raise HTTPException(status_code=404, detail="هیچ سشنی مطابق با فیلترهای انتخابی یافت نشد.")
 
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        for file_path in target_files:
+        for file_path in filtered_files:
             zip_file.write(file_path, arcname=file_path.name)
 
     zip_buffer.seek(0)
-    filename = f"telegram_sessions_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+
+    # Build descriptive filename
+    parts = ["telegram_sessions"]
+    if cat_filter:
+        if cat_filter == "__nocat__":
+            parts.append("uncategorized")
+        else:
+            safe_cat = re.sub(r'[^\w\-]+', '_', cat_filter).strip("_")
+            if safe_cat:
+                parts.append(safe_cat)
+    if rem_filter:
+        safe_rem = re.sub(r'[^\w\-]+', '_', rem_filter).strip("_")
+        if safe_rem:
+            parts.append(safe_rem)
+    if via_filter:
+        parts.append(via_filter)
+
+    parts.append(datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+    filename = "_".join(parts) + ".zip"
+    ascii_filename = f"telegram_sessions_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+    encoded_filename = urllib.parse.quote(filename)
 
     return Response(
         content=zip_buffer.getvalue(),
         media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{encoded_filename}"
+        }
     )
 
 

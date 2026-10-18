@@ -136,3 +136,81 @@ def test_api_categories_and_metadata_endpoints():
     assert batch_tgt.status_code == 200
     assert batch_tgt.json()["status"] == "success"
     assert batch_tgt.json()["updated_count"] == 2
+
+
+def test_download_target_zip_with_filters():
+    import io
+    import zipfile
+    from server.main import settings
+
+    # Ensure target directory has dummy sessions
+    settings.target_sessions_dir.mkdir(parents=True, exist_ok=True)
+    t1 = settings.target_sessions_dir / "target_cat_a.session"
+    t1.write_bytes(b"dummy session data 1")
+    t2 = settings.target_sessions_dir / "target_cat_b.session"
+    t2.write_bytes(b"dummy session data 2")
+    t3 = settings.target_sessions_dir / "target_nocat.session"
+    t3.write_bytes(b"dummy session data 3")
+
+    client = TestClient(app)
+    client.post("/api/sessions/target/metadata", json={
+        "filename": "target_cat_a.session",
+        "category": "CategoryA",
+        "remark": "Special Remark Alpha"
+    })
+    client.post("/api/sessions/target/metadata", json={
+        "filename": "target_cat_b.session",
+        "category": "CategoryB",
+        "remark": "Special Remark Beta"
+    })
+    client.post("/api/sessions/target/metadata", json={
+        "filename": "target_nocat.session",
+        "category": "",
+        "remark": ""
+    })
+
+    # 1. Download all (no filter)
+    res_all = client.get("/api/download/target-all-zip")
+    assert res_all.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(res_all.content)) as z:
+        namelist = z.namelist()
+        assert "target_cat_a.session" in namelist
+        assert "target_cat_b.session" in namelist
+        assert "target_nocat.session" in namelist
+
+    # 2. Filter by category=CategoryA
+    res_a = client.get("/api/download/target-all-zip?category=CategoryA")
+    assert res_a.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(res_a.content)) as z:
+        namelist = z.namelist()
+        assert "target_cat_a.session" in namelist
+        assert "target_cat_b.session" not in namelist
+        assert "target_nocat.session" not in namelist
+
+    # 3. Filter by remark="Alpha"
+    res_rem = client.get("/api/download/target-all-zip?remark=alpha")
+    assert res_rem.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(res_rem.content)) as z:
+        namelist = z.namelist()
+        assert "target_cat_a.session" in namelist
+        assert "target_cat_b.session" not in namelist
+
+    # 4. Filter by uncategorized (__nocat__)
+    res_nocat = client.get("/api/download/target-all-zip?category=__nocat__")
+    assert res_nocat.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(res_nocat.content)) as z:
+        namelist = z.namelist()
+        assert "target_nocat.session" in namelist
+        assert "target_cat_a.session" not in namelist
+
+    # 5. Non-matching filter returns 404
+    res_404 = client.get("/api/download/target-all-zip?category=NonExistentCategory")
+    assert res_404.status_code == 404
+
+    # Clean up test files
+    for f in [t1, t2, t3]:
+        try:
+            f.unlink()
+        except Exception:
+            pass
+

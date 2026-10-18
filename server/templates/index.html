@@ -311,9 +311,9 @@
               سشن‌های ساخته‌شده (مقصد)
             </h2>
             <div class="flex items-center gap-1.5">
-              <button onclick="downloadAllZip()" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 transition">
+              <button onclick="openDownloadTargetModal()" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 transition">
                 <i class="ph-bold ph-file-zip text-sm"></i>
-                دانلود همه (.ZIP)
+                دانلود سشن‌ها (.ZIP)
               </button>
               <button onclick="deleteAllTargetSessions()" title="حذف تمام سشن‌های ساخته‌شده مقصد" class="px-2 py-1 rounded-lg text-xs font-semibold bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 flex items-center gap-1 transition">
                 <i class="ph-bold ph-trash text-sm"></i>
@@ -841,6 +841,67 @@
     </div>
   </div>
 
+  <!-- Download Target Sessions Modal -->
+  <div id="download-target-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass rounded-2xl max-w-md w-full p-6 space-y-4 border border-emerald-500/40 animate-in fade-in zoom-in-95 duration-200">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i class="ph-bold ph-file-zip text-emerald-400 text-lg"></i>
+          دانلود سشن‌ها بر اساس دسته‌بندی و ریمارک
+        </h3>
+        <button onclick="closeDownloadTargetModal()" class="text-slate-400 hover:text-white transition">
+          <i class="ph-bold ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3.5 text-xs">
+        <div>
+          <label class="block text-slate-300 mb-1 font-medium">فیلتر بر اساس دسته‌بندی (Category):</label>
+          <select id="download-cat-select" onchange="updateDownloadMatchCount()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs">
+            <option value="">همه دسته‌ها (دانلود همه)</option>
+            <option value="__nocat__">فقط سشن‌های بدون دسته</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 mb-1 font-medium">فیلتر بر اساس ریمارک / یادداشت (Remark):</label>
+          <input type="text" id="download-remark-input" oninput="updateDownloadMatchCount()" placeholder="مثلاً: ری اکت، ادمین، bot... (اختیاری)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs">
+          <p class="text-[10px] text-slate-500 mt-1">بخشی از متن ریمارک را وارد کنید تا فقط سشن‌های حاوی این متن دانلود شوند.</p>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 mb-1 font-medium">نوع اتصال / سرور ساخت:</label>
+          <select id="download-type-select" onchange="updateDownloadMatchCount()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs">
+            <option value="">همه انواع (مستقیم + پروکسی)</option>
+            <option value="direct">فقط مستقیم سرور</option>
+            <option value="proxy">فقط ساخته‌شده با پروکسی</option>
+          </select>
+        </div>
+
+        <!-- Live matching status -->
+        <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i class="ph-bold ph-check-circle text-emerald-400 text-base"></i>
+            <span class="text-slate-300 text-xs">تعداد سشن‌های منطبق:</span>
+          </div>
+          <span id="download-match-count" class="font-bold font-mono text-emerald-300 text-sm bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-lg">۰ سشن</span>
+        </div>
+
+        <div class="space-y-2 pt-1">
+          <button id="download-confirm-btn" onclick="confirmDownloadTargetZip()" class="w-full py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/30">
+            <i class="ph-bold ph-download-simple text-sm"></i>
+            دانلود فایل ZIP سشن‌های منتخب
+          </button>
+          
+          <button onclick="downloadAllZipDirect()" class="w-full py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition flex items-center justify-center gap-1.5 border border-slate-700">
+            <i class="ph-bold ph-files text-sm"></i>
+            دانلود همه سشن‌ها بدون فیلتر (.ZIP)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     function escapeHtml(text) {
       if (text === null || text === undefined) return '';
@@ -898,6 +959,17 @@
           });
           tgtSelect.innerHTML = html;
           tgtSelect.value = curVal;
+        }
+
+        const dlSelect = document.getElementById('download-cat-select');
+        if (dlSelect) {
+          const curVal = dlSelect.value;
+          let html = '<option value="">همه دسته‌ها (دانلود همه)</option><option value="__nocat__">فقط سشن‌های بدون دسته</option>';
+          allCategories.forEach(c => {
+            html += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
+          });
+          dlSelect.innerHTML = html;
+          if (curVal) dlSelect.value = curVal;
         }
       } catch (e) {
         console.error("Error loading categories:", e);
@@ -2109,8 +2181,130 @@
       document.getElementById('logs-console').innerHTML = `<div class="text-slate-500">// لاگ‌ها پاک شدند.</div>`;
     }
 
-    function downloadAllZip() {
+    // =======================================================
+    // Download Filtered Target Sessions
+    // =======================================================
+    function openDownloadTargetModal() {
+      const dlSelect = document.getElementById('download-cat-select');
+      if (dlSelect) {
+        let html = '<option value="">همه دسته‌ها (دانلود همه)</option><option value="__nocat__">فقط سشن‌های بدون دسته</option>';
+        allCategories.forEach(c => {
+          html += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
+        });
+        dlSelect.innerHTML = html;
+        if (currentTargetCategory) {
+          dlSelect.value = currentTargetCategory;
+        } else {
+          dlSelect.value = '';
+        }
+      }
+
+      const typeSelect = document.getElementById('download-type-select');
+      if (typeSelect) {
+        if (currentTargetFilter && ['direct', 'proxy'].includes(currentTargetFilter)) {
+          typeSelect.value = currentTargetFilter;
+        } else {
+          typeSelect.value = '';
+        }
+      }
+
+      const remarkInput = document.getElementById('download-remark-input');
+      if (remarkInput) remarkInput.value = '';
+
+      updateDownloadMatchCount();
+      document.getElementById('download-target-modal').classList.remove('hidden');
+    }
+
+    function closeDownloadTargetModal() {
+      document.getElementById('download-target-modal').classList.add('hidden');
+    }
+
+    function getFilteredTargetSessionsForDownload() {
+      if (!allTargetSessions || allTargetSessions.length === 0) return [];
+
+      const catEl = document.getElementById('download-cat-select');
+      const remEl = document.getElementById('download-remark-input');
+      const typeEl = document.getElementById('download-type-select');
+
+      const cat = catEl ? catEl.value.trim() : '';
+      const remark = remEl ? remEl.value.trim().toLowerCase() : '';
+      const type = typeEl ? typeEl.value.trim() : '';
+
+      return allTargetSessions.filter(item => {
+        // Category check
+        if (cat) {
+          if (cat === '__nocat__') {
+            if (item.category && item.category.trim() !== '') return false;
+          } else {
+            if ((item.category || '').trim() !== cat) return false;
+          }
+        }
+
+        // Remark check (substring, case-insensitive)
+        if (remark) {
+          const itemRem = (item.remark || '').toLowerCase();
+          if (!itemRem.includes(remark)) return false;
+        }
+
+        // Connection type check
+        if (type) {
+          if (item.created_via !== type) return false;
+        }
+
+        return true;
+      });
+    }
+
+    function updateDownloadMatchCount() {
+      const countEl = document.getElementById('download-match-count');
+      const submitBtn = document.getElementById('download-confirm-btn');
+      if (!countEl) return;
+
+      const matched = getFilteredTargetSessionsForDownload();
+      countEl.innerText = `${matched.length} سشن`;
+
+      if (submitBtn) {
+        if (matched.length === 0) {
+          submitBtn.disabled = true;
+          submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        } else {
+          submitBtn.disabled = false;
+          submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+      }
+    }
+
+    function confirmDownloadTargetZip() {
+      const matched = getFilteredTargetSessionsForDownload();
+      if (matched.length === 0) {
+        alert("هیچ سشنی مطابق با فیلترهای مشخص‌شده برای دانلود وجود ندارد.");
+        return;
+      }
+
+      const catEl = document.getElementById('download-cat-select');
+      const remEl = document.getElementById('download-remark-input');
+      const typeEl = document.getElementById('download-type-select');
+
+      const cat = catEl ? catEl.value.trim() : '';
+      const remark = remEl ? remEl.value.trim() : '';
+      const type = typeEl ? typeEl.value.trim() : '';
+
+      const url = new URL('/api/download/target-all-zip', window.location.origin);
+      if (cat) url.searchParams.set('category', cat);
+      if (remark) url.searchParams.set('remark', remark);
+      if (type) url.searchParams.set('created_via', type);
+
+      closeDownloadTargetModal();
+      window.location.href = url.toString();
+    }
+
+    function downloadAllZipDirect() {
+      closeDownloadTargetModal();
       window.location.href = '/api/download/target-all-zip';
+    }
+
+    function downloadAllZip() {
+      openDownloadTargetModal();
     }
 
     // =======================================================
