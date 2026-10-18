@@ -374,3 +374,58 @@ class AccountManagementService:
             ])
 
         return output.getvalue()
+
+    def import_passwords_csv(self, csv_content: str) -> int:
+        """
+        Imports 2FA passwords from CSV content into storage/passwords.json.
+        Detects header columns for phone/identifier and password/2FA automatically.
+        """
+        imported_count = 0
+        reader = csv.reader(io.StringIO(csv_content))
+        rows = [r for r in reader if any(field.strip() for field in r)]
+        if not rows:
+            return 0
+
+        header = [c.strip().lower() for c in rows[0]]
+        phone_idx = -1
+        pwd_idx = -1
+
+        for idx, col in enumerate(header):
+            if any(k in col for k in ["phone", "identifier", "شماره", "number"]):
+                phone_idx = idx
+            elif any(k in col for k in ["password", "2fa", "رمز", "pass"]):
+                pwd_idx = idx
+
+        start_row = 1 if (phone_idx != -1 and pwd_idx != -1) else 0
+        if phone_idx == -1 or pwd_idx == -1:
+            phone_idx = 0
+            pwd_idx = 1
+
+        passwords = self._load_passwords()
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        for row in rows[start_row:]:
+            if len(row) <= max(phone_idx, pwd_idx):
+                continue
+            phone = row[phone_idx].strip()
+            pwd = row[pwd_idx].strip()
+            if not phone or not pwd:
+                continue
+
+            clean_phone = phone.replace(" ", "")
+            passwords[clean_phone] = {
+                "password": pwd,
+                "note": "Imported from CSV",
+                "updated_at": now_str
+            }
+            passwords[clean_phone.lstrip("+")] = {
+                "password": pwd,
+                "note": "Imported from CSV",
+                "updated_at": now_str
+            }
+            imported_count += 1
+
+        self.passwords_file.write_text(json.dumps(passwords, ensure_ascii=False, indent=2), encoding="utf-8")
+        logger.info(f"Imported {imported_count} 2FA passwords from CSV into storage.")
+        return imported_count
+

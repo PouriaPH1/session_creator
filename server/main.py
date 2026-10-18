@@ -175,22 +175,27 @@ async def list_source_sessions():
     return pool.get_detailed_sessions()
 
 
-@app.post("/api/sessions/upload", summary="Upload .session files")
+@app.post("/api/sessions/upload", summary="Upload .session and .csv files")
 async def upload_sessions(files: List[UploadFile] = File(...)):
     saved_count = 0
+    csv_count = 0
     for file in files:
-        if not file.filename.endswith(".session"):
-            continue
-        dest_path = settings.source_sessions_dir / file.filename
-        content = await file.read()
-        dest_path.write_bytes(content)
-        saved_count += 1
+        if file.filename.endswith(".session"):
+            dest_path = settings.source_sessions_dir / file.filename
+            content = await file.read()
+            dest_path.write_bytes(content)
+            saved_count += 1
+        elif file.filename.endswith(".csv"):
+            content = await file.read()
+            csv_text = content.decode("utf-8-sig", errors="ignore")
+            csv_count += account_service.import_passwords_csv(csv_text)
 
     # Reload pool after upload
     await pool.reload()
     return {
         "status": "uploaded",
         "uploaded_count": saved_count,
+        "csv_passwords_imported": csv_count,
         "total_active": len(pool.list_sessions())
     }
 
@@ -348,7 +353,17 @@ async def migrate_single(req: SingleMigrateRequest):
         raise HTTPException(status_code=400, detail="A migration job is already running.")
 
     effective_proxy = req.proxy or proxy_service.get_default_proxy()
-    passwords = {req.phone: req.password} if req.password else {}
+    pwd = req.password
+    if not pwd:
+        stored = account_service.get_all_passwords()
+        for k in [req.phone, req.phone.lstrip("+"), f"+{req.phone.lstrip('+')}"]:
+            if k in stored:
+                item = stored[k]
+                pwd = item.get("password") if isinstance(item, dict) else item
+                if pwd:
+                    break
+
+    passwords = {req.phone: pwd} if pwd else {}
     started = await migration_manager.start_batch_migration(
         [req.phone],
         passwords,
@@ -372,8 +387,23 @@ async def migrate_batch(req: BatchMigrateRequest):
         raise HTTPException(status_code=400, detail="No active authorized sessions found to migrate.")
 
     effective_proxy = req.proxy or proxy_service.get_default_proxy()
+
+    # Pass 2FA passwords from account service to migration worker
+    passwords_dict = {}
+    stored = account_service.get_all_passwords()
+    for ph, info in stored.items():
+        if isinstance(info, dict) and "password" in info:
+            passwords_dict[ph] = info["password"]
+            passwords_dict[ph.lstrip("+")] = info["password"]
+            passwords_dict[f"+{ph.lstrip('+')}"] = info["password"]
+        elif isinstance(info, str):
+            passwords_dict[ph] = info
+            passwords_dict[ph.lstrip("+")] = info
+            passwords_dict[f"+{ph.lstrip('+')}"] = info
+
     started = await migration_manager.start_batch_migration(
         active_phones,
+        two_fa_passwords=passwords_dict,
         delay=req.delay,
         proxy=effective_proxy
     )
@@ -506,6 +536,22 @@ async def export_passwords_csv():
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+@app.post("/api/accounts/passwords/import-csv", summary="Import 2FA passwords from CSV")
+async def import_passwords_csv(file: UploadFile = File(...)):
+    try:
+        content = await file.read()
+        csv_text = content.decode("utf-8-sig", errors="ignore")
+        count = account_service.import_passwords_csv(csv_text)
+        return {
+            "status": "success",
+            "imported_count": count,
+            "total_passwords": len(account_service.get_all_passwords())
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.post("/api/accounts/batch-names", summary="Assign random names to accounts")

@@ -125,8 +125,25 @@ class MigrationJobManager:
             for idx, phone in enumerate(phones, start=1):
                 self.current_phone = phone
                 self.status_text = f"در حال پردازش {phone} ({idx}/{len(phones)})..."
-                self._add_log(f"[{idx}/{len(phones)}] Requesting migration for {phone}...")
-                pwd = passwords.get(phone)
+                pwd = (
+                    passwords.get(phone)
+                    or passwords.get(phone.lstrip("+"))
+                    or passwords.get(f"+{phone.lstrip('+')}")
+                )
+                if not pwd:
+                    passwords_file = self.settings.base_dir / "storage" / "passwords.json"
+                    if passwords_file.exists():
+                        try:
+                            import json
+                            saved_data = json.loads(passwords_file.read_text(encoding="utf-8"))
+                            for k in [phone, phone.lstrip("+"), f"+{phone.lstrip('+')}"]:
+                                if k in saved_data:
+                                    item = saved_data[k]
+                                    pwd = item.get("password") if isinstance(item, dict) else item
+                                    if pwd:
+                                        break
+                        except Exception as e:
+                            logger.warning(f"Failed to read 2FA password from storage: {e}")
 
                 try:
                     target_file = await creator.create_single_session(
