@@ -220,16 +220,56 @@ async def reload_sessions():
 # ==========================================
 @app.get("/api/sessions/target", summary="List generated target sessions")
 async def list_target_sessions():
+    import json
     target_files = list(settings.target_sessions_dir.glob("*.session"))
+    meta_file = settings.base_dir / "storage" / "target_sessions_metadata.json"
+    metadata_map = {}
+    if meta_file.exists():
+        try:
+            metadata_map = json.loads(meta_file.read_text(encoding="utf-8"))
+        except Exception:
+            metadata_map = {}
+
     results = []
     for f in target_files:
         stats = f.stat()
+        meta = metadata_map.get(f.name, {})
+        created_via = meta.get("created_via", "direct")
+        proxy_name = meta.get("proxy_name")
+        if not proxy_name:
+            proxy_name = "پروکسی" if created_via == "proxy" else "مستقیم (سرور اول)"
+        proxy_ip = meta.get("proxy_ip") or meta.get("proxy") or ("آی‌پی سرور اول" if created_via == "direct" else "-")
+
         results.append({
             "filename": f.name,
+            "phone": meta.get("phone", f.stem),
             "size_kb": round(stats.st_size / 1024, 2),
-            "created_at": datetime.datetime.fromtimestamp(stats.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+            "created_at": meta.get("created_at") or datetime.datetime.fromtimestamp(stats.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+            "created_via": created_via,
+            "proxy_name": proxy_name,
+            "proxy_ip": proxy_ip,
+            "proxy_url": meta.get("proxy_url")
         })
     return sorted(results, key=lambda x: x["created_at"], reverse=True)
+
+
+@app.delete("/api/sessions/target/{filename}", summary="Delete a generated target session")
+async def delete_target_session(filename: str):
+    import json
+    file_path = settings.target_sessions_dir / filename
+    if file_path.exists():
+        file_path.unlink()
+        meta_file = settings.base_dir / "storage" / "target_sessions_metadata.json"
+        if meta_file.exists():
+            try:
+                m_data = json.loads(meta_file.read_text(encoding="utf-8"))
+                if filename in m_data:
+                    del m_data[filename]
+                    meta_file.write_text(json.dumps(m_data, ensure_ascii=False, indent=2), encoding="utf-8")
+            except Exception:
+                pass
+        return {"status": "deleted", "filename": filename}
+    raise HTTPException(status_code=404, detail="File not found")
 
 
 @app.get("/api/download/target/{filename}", summary="Download a generated target session")

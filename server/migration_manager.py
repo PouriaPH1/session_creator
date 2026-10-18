@@ -133,13 +133,54 @@ class MigrationJobManager:
                         phone=phone,
                         two_fa_password=pwd
                     )
+
+                    # Determine proxy info for metadata
+                    proxy_name = "مستقیم (سرور اول)"
+                    proxy_ip = "آی‌پی سرور اول"
+                    if proxy:
+                        proxy_name = "پروکسی"
+                        proxy_ip = proxy
+                        try:
+                            from server.proxy_service import ProxyService
+                            ps = ProxyService(self.settings)
+                            for p in ps.get_all():
+                                if p.get("url") == proxy:
+                                    proxy_name = p.get("name") or "پروکسی"
+                                    proxy_ip = p.get("ip") or proxy
+                                    break
+                        except Exception:
+                            pass
+
+                    # Record metadata in storage/target_sessions_metadata.json
+                    meta_file = self.settings.base_dir / "storage" / "target_sessions_metadata.json"
+                    try:
+                        import json
+                        meta_data = {}
+                        if meta_file.exists():
+                            try:
+                                meta_data = json.loads(meta_file.read_text(encoding="utf-8"))
+                            except Exception:
+                                meta_data = {}
+                        meta_data[target_file.name] = {
+                            "phone": phone,
+                            "session_name": target_file.stem,
+                            "created_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "created_via": "proxy" if proxy else "direct",
+                            "proxy_name": proxy_name,
+                            "proxy_ip": proxy_ip,
+                            "proxy_url": proxy
+                        }
+                        meta_file.write_text(json.dumps(meta_data, ensure_ascii=False, indent=2), encoding="utf-8")
+                    except Exception as meta_err:
+                        logger.warning(f"Failed to save target session metadata: {meta_err}")
+
                     self.results.append({
                         "phone": phone,
                         "success": True,
                         "detail": f"Saved {target_file.name}",
                         "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     })
-                    self._add_log(f"[{idx}/{len(phones)}] ✅ Success for {phone}")
+                    self._add_log(f"[{idx}/{len(phones)}] ✅ Success for {phone} ({proxy_name})")
 
                 except Exception as e:
                     self.results.append({

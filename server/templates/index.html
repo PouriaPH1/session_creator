@@ -168,7 +168,7 @@
                 مدیریت پروکسی‌ها
               </button>
 
-              <button onclick="startBatchMigrationPrompt()" class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md shadow-indigo-600/30 flex items-center gap-1.5">
+              <button onclick="openBatchMigrateModal()" class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md shadow-indigo-600/30 flex items-center gap-1.5">
                 <i class="ph-bold ph-play text-sm"></i>
                 ساخت تمام سشن‌ها
               </button>
@@ -243,7 +243,25 @@
             </button>
           </div>
 
-          <div id="target-sessions-list" class="space-y-2 max-h-72 overflow-y-auto pr-1">
+          <!-- Category Filter Pills -->
+          <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs" id="target-filter-pills">
+            <button onclick="filterTargetSessions('all')" id="pill-filter-all" class="px-3 py-1 rounded-lg font-semibold bg-indigo-600 text-white shadow-sm transition shrink-0 flex items-center gap-1.5">
+              <span>همه</span>
+              <span id="count-target-all" class="bg-indigo-700/60 px-1.5 py-0.2 rounded-full text-[10px]">۰</span>
+            </button>
+            <button onclick="filterTargetSessions('direct')" id="pill-filter-direct" class="px-3 py-1 rounded-lg font-semibold bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800 transition shrink-0 flex items-center gap-1.5">
+              <i class="ph-bold ph-hard-drive text-sky-400"></i>
+              <span>مستقیم سرور</span>
+              <span id="count-target-direct" class="bg-slate-800 px-1.5 py-0.2 rounded-full text-[10px] text-sky-300">۰</span>
+            </button>
+            <button onclick="filterTargetSessions('proxy')" id="pill-filter-proxy" class="px-3 py-1 rounded-lg font-semibold bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800 transition shrink-0 flex items-center gap-1.5">
+              <i class="ph-bold ph-globe text-purple-400"></i>
+              <span>با پروکسی</span>
+              <span id="count-target-proxy" class="bg-slate-800 px-1.5 py-0.2 rounded-full text-[10px] text-purple-300">۰</span>
+            </button>
+          </div>
+
+          <div id="target-sessions-list" class="space-y-2 max-h-80 overflow-y-auto pr-1">
             <div class="text-center p-4 text-xs text-slate-500">هنوز سشنی در پوشه مقصد ساخته نشده است.</div>
           </div>
         </div>
@@ -543,6 +561,42 @@
     </div>
   </div>
 
+  <!-- Batch Migrate Modal -->
+  <div id="batch-migrate-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass rounded-2xl max-w-sm w-full p-6 space-y-4 border border-indigo-500/40 animate-in fade-in zoom-in-95 duration-200">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i class="ph-bold ph-play-circle text-indigo-400 text-lg"></i>
+          ساخت دسته‌جمعی تمام سشن‌ها
+        </h3>
+        <button onclick="closeBatchMigrateModal()" class="text-slate-400 hover:text-white transition">
+          <i class="ph-bold ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-300 mb-1">انتخاب سرور / پروکسی مقصد برای ساخت:</label>
+          <select id="batch-migrate-proxy-select" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+            <option value="">(مستقیم - آی‌پی سرور مبدأ / پیش‌فرض)</option>
+          </select>
+          <p class="text-[10px] text-slate-400 mt-1">تمام سشن‌های جدید با این آی‌پی به تلگرام متصل و لاگین خواهند شد.</p>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 mb-1">فاصله زمانی بین هر ساخت (ثانیه):</label>
+          <input type="number" id="batch-migrate-delay" value="15" min="3" max="300" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500">
+          <p class="text-[10px] text-slate-400 mt-1">پیشنهاد می‌شود جهت امنیت اکانت‌ها حداقل ۱۰ تا ۱۵ ثانیه باشد.</p>
+        </div>
+
+        <button onclick="confirmBatchMigrate()" class="w-full py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/30">
+          <i class="ph-bold ph-play"></i>
+          شروع ساخت تمام سشن‌ها
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let pollInterval = null;
 
@@ -632,34 +686,127 @@
       return text.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     }
 
+    let allTargetSessions = [];
+    let currentTargetFilter = 'all';
+
     async function loadTargetSessions() {
       try {
         const res = await fetch('/api/sessions/target');
-        const list = await res.json();
-        const container = document.getElementById('target-sessions-list');
+        allTargetSessions = await res.json();
 
-        if (!list || list.length === 0) {
-          container.innerHTML = `<div class="text-center p-4 text-xs text-slate-500">هنوز سشنی در پوشه مقصد ساخته نشده است.</div>`;
-          return;
-        }
+        const directCount = allTargetSessions.filter(s => s.created_via === 'direct').length;
+        const proxyCount = allTargetSessions.filter(s => s.created_via === 'proxy').length;
+        const totalCount = allTargetSessions.length;
 
-        container.innerHTML = list.map(item => `
-          <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs hover:border-slate-700 transition">
-            <div class="flex items-center gap-2">
-              <i class="ph-bold ph-file-code text-indigo-400 text-base"></i>
-              <div>
-                <p class="font-mono font-semibold text-slate-200">${item.filename}</p>
-                <p class="text-[10px] text-slate-400">${item.size_kb} KB • ${item.created_at}</p>
-              </div>
-            </div>
-            <a href="/api/download/target/${item.filename}" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1">
-              <i class="ph-bold ph-download-simple"></i>
-            </a>
-          </div>
-        `).join('');
+        const countAllEl = document.getElementById('count-target-all');
+        const countDirectEl = document.getElementById('count-target-direct');
+        const countProxyEl = document.getElementById('count-target-proxy');
 
+        if (countAllEl) countAllEl.innerText = totalCount;
+        if (countDirectEl) countDirectEl.innerText = directCount;
+        if (countProxyEl) countProxyEl.innerText = proxyCount;
+
+        renderTargetSessions(currentTargetFilter);
       } catch (e) {
         console.error("Error loading target sessions:", e);
+      }
+    }
+
+    function filterTargetSessions(filterType) {
+      currentTargetFilter = filterType;
+
+      const btnAll = document.getElementById('pill-filter-all');
+      const btnDirect = document.getElementById('pill-filter-direct');
+      const btnProxy = document.getElementById('pill-filter-proxy');
+
+      const activeClasses = 'px-3 py-1 rounded-lg font-semibold bg-indigo-600 text-white shadow-sm transition shrink-0 flex items-center gap-1.5';
+      const inactiveClasses = 'px-3 py-1 rounded-lg font-semibold bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800 transition shrink-0 flex items-center gap-1.5';
+
+      if (btnAll) btnAll.className = (filterType === 'all') ? activeClasses : inactiveClasses;
+      if (btnDirect) btnDirect.className = (filterType === 'direct') ? activeClasses : inactiveClasses;
+      if (btnProxy) btnProxy.className = (filterType === 'proxy') ? activeClasses : inactiveClasses;
+
+      renderTargetSessions(filterType);
+    }
+
+    function renderTargetSessions(filterType) {
+      const container = document.getElementById('target-sessions-list');
+      if (!container) return;
+
+      if (!allTargetSessions || allTargetSessions.length === 0) {
+        container.innerHTML = `<div class="text-center p-6 text-xs text-slate-500">هنوز سشنی در پوشه مقصد ساخته نشده است.</div>`;
+        return;
+      }
+
+      let filtered = allTargetSessions;
+      if (filterType === 'direct') {
+        filtered = allTargetSessions.filter(s => s.created_via === 'direct');
+      } else if (filterType === 'proxy') {
+        filtered = allTargetSessions.filter(s => s.created_via === 'proxy');
+      }
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="text-center p-6 text-xs text-slate-500">هیچ سشنی در این دسته‌بندی وجود ندارد.</div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(item => {
+        const isProxy = item.created_via === 'proxy';
+        const badgeHtml = isProxy
+          ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30" title="پروکسی: ${escapeHtml(item.proxy_url || '')}">
+               <i class="ph-bold ph-globe text-purple-400"></i>
+               ${escapeHtml(item.proxy_name || 'پروکسی')}
+               <span class="font-mono text-purple-300/80 text-[9px]">(${escapeHtml(item.proxy_ip || '-')})</span>
+             </span>`
+          : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
+               <i class="ph-bold ph-hard-drive text-sky-400"></i>
+               مستقیم (سرور اول)
+             </span>`;
+
+        return `
+          <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition gap-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
+                <i class="ph-bold ph-file-code text-indigo-400 text-sm"></i>
+              </div>
+              <div class="min-w-0 space-y-0.5">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="font-mono font-bold text-slate-200 text-xs truncate">${item.filename}</span>
+                  ${badgeHtml}
+                </div>
+                <div class="text-[10px] text-slate-400 flex items-center gap-1.5 font-mono">
+                  <span>${item.size_kb} KB</span>
+                  <span>•</span>
+                  <span>${item.created_at}</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <a href="/api/download/target/${encodeURIComponent(item.filename)}" title="دانلود سشن" class="p-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition flex items-center justify-center">
+                <i class="ph-bold ph-download-simple text-xs"></i>
+              </a>
+              <button onclick="deleteTargetSession('${encodeURIComponent(item.filename)}')" title="حذف سشن" class="p-1.5 rounded-lg bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 border border-rose-500/20 transition flex items-center justify-center">
+                <i class="ph-bold ph-trash text-xs"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function deleteTargetSession(filename) {
+      const decoded = decodeURIComponent(filename);
+      if (!confirm(`آیا از حذف سشن ساخته‌شده ${decoded} اطمینان دارید؟`)) return;
+      try {
+        const res = await fetch(`/api/sessions/target/${encodeURIComponent(decoded)}`, { method: 'DELETE' });
+        if (res.ok) {
+          await loadTargetSessions();
+          await loadStats();
+        } else {
+          alert("خطا در حذف سشن");
+        }
+      } catch (e) {
+        alert("خطا: " + e);
       }
     }
 
@@ -1031,15 +1178,33 @@
       alert("کد " + code + " در کلیپ‌بورد کپی شد.");
     }
 
-    async function startBatchMigrationPrompt() {
-      const delay = prompt("فاصله زمانی بین ساخت سشن‌ها به ثانیه (Cooldown):", "15");
-      if (!delay) return;
+    function openBatchMigrateModal() {
+      populateProxyDropdown();
+      document.getElementById('batch-migrate-modal').classList.remove('hidden');
+    }
+
+    function closeBatchMigrateModal() {
+      document.getElementById('batch-migrate-modal').classList.add('hidden');
+    }
+
+    function startBatchMigrationPrompt() {
+      openBatchMigrateModal();
+    }
+
+    async function confirmBatchMigrate() {
+      const delay = parseFloat(document.getElementById('batch-migrate-delay').value) || 15;
+      const proxy = document.getElementById('batch-migrate-proxy-select').value;
+
+      closeBatchMigrateModal();
 
       try {
         const res = await fetch('/api/migrate/batch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ delay: parseFloat(delay) || 15 })
+          body: JSON.stringify({
+            delay: delay,
+            proxy: proxy || null
+          })
         });
         const data = await res.json();
         if (res.ok) {
@@ -1048,7 +1213,7 @@
           alert("خطا در اجرای فرآیند: " + data.detail);
         }
       } catch (e) {
-        alert("خطا در درخواست مهاجرت: " + e);
+        alert("خطا در درخواست ساخت سشن: " + e);
       }
     }
 
@@ -1186,14 +1351,18 @@
     }
 
     function populateProxyDropdown() {
-      const select = document.getElementById('migrate-proxy-select');
-      if (!select) return;
-      select.innerHTML = '<option value="">(مستقیم - آی‌پی سرور مبدأ)</option>' +
+      const selectSingle = document.getElementById('migrate-proxy-select');
+      const selectBatch = document.getElementById('batch-migrate-proxy-select');
+
+      const optionsHtml = '<option value="">(مستقیم - آی‌پی سرور اول)</option>' +
         savedProxies.map(p => `
           <option value="${p.url}" ${p.is_default ? 'selected' : ''}>
             ${p.name} ${p.ip ? `(${p.ip})` : ''} ${p.is_default ? '⭐ پیش‌فرض' : ''}
           </option>
         `).join('');
+
+      if (selectSingle) selectSingle.innerHTML = optionsHtml;
+      if (selectBatch) selectBatch.innerHTML = optionsHtml;
     }
 
     function openProxiesModal() {
