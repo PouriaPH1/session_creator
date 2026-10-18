@@ -80,6 +80,7 @@ class SingleMigrateRequest(BaseModel):
 class BatchMigrateRequest(BaseModel):
     delay: float = 15.0
     proxy: Optional[str] = None
+    skip_existing: bool = True
 
 
 class AddProxyRequest(BaseModel):
@@ -463,6 +464,52 @@ async def migrate_batch(req: BatchMigrateRequest):
     if not active_phones:
         raise HTTPException(status_code=400, detail="هیچ سشن سالم و فعالی برای ساخت سشن یافت نشد.")
 
+    # Filter out already existing target sessions if skip_existing is True
+    skipped_existing_count = 0
+    if req.skip_existing:
+        target_files = list(settings.target_sessions_dir.glob("*.session"))
+        target_stems = {f.stem for f in target_files}
+        meta_file = settings.base_dir / "storage" / "target_sessions_metadata.json"
+        if meta_file.exists():
+            try:
+                import json
+                meta_map = json.loads(meta_file.read_text(encoding="utf-8"))
+                for item in meta_map.values():
+                    if isinstance(item, dict) and "phone" in item:
+                        p = item["phone"]
+                        target_stems.add(p)
+                        target_stems.add(p.lstrip("+"))
+                        target_stems.add(f"+{p.lstrip('+')}")
+            except Exception:
+                pass
+
+        new_active_phones = []
+        for ph in active_phones:
+            clean_p = ph.strip().replace(" ", "")
+            p_no_plus = clean_p.lstrip("+")
+            p_plus = f"+{p_no_plus}"
+            if (
+                clean_p in target_stems
+                or p_no_plus in target_stems
+                or p_plus in target_stems
+                or (settings.target_sessions_dir / f"{p_no_plus}.session").exists()
+                or (settings.target_sessions_dir / f"{p_plus}.session").exists()
+            ):
+                skipped_existing_count += 1
+            else:
+                new_active_phones.append(ph)
+
+        if not new_active_phones:
+            return {
+                "status": "already_completed",
+                "message": f"تمام {len(active_phones)} سشن سالم از قبل ساخته شده‌اند و سشن جدیدی برای ساخت وجود ندارد.",
+                "total_accounts": 0,
+                "skipped_existing_count": skipped_existing_count,
+                "skipped_faulty_count": faulty_count
+            }
+
+        active_phones = new_active_phones
+
     effective_proxy = req.proxy or proxy_service.get_default_proxy()
 
     # Pass 2FA passwords from account service to migration worker
@@ -482,13 +529,15 @@ async def migrate_batch(req: BatchMigrateRequest):
         active_phones,
         two_fa_passwords=passwords_dict,
         delay=req.delay,
-        proxy=effective_proxy
+        proxy=effective_proxy,
+        skip_existing=req.skip_existing
     )
     if not started:
         raise HTTPException(status_code=400, detail="Failed to start migration job.")
     return {
         "status": "started",
         "total_accounts": len(active_phones),
+        "skipped_existing_count": skipped_existing_count,
         "skipped_faulty_count": faulty_count,
         "delay": req.delay,
         "proxy_used": effective_proxy

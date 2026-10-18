@@ -71,3 +71,30 @@ def test_delete_all_target_endpoint(tmp_path, monkeypatch):
     assert res.json()["deleted_count"] >= 1
     assert not dummy_file.exists()
 
+
+def test_batch_migrate_skip_existing_when_all_exist(tmp_path, monkeypatch):
+    from config.settings import get_settings
+    from server.main import pool, migration_manager
+    settings = get_settings()
+
+    test_tgt = tmp_path / "target"
+    test_tgt.mkdir(parents=True, exist_ok=True)
+    (test_tgt / "123456789.session").write_text("test")
+    monkeypatch.setattr(settings, "target_sessions_dir", test_tgt)
+
+    # Mock detailed sessions with the same phone
+    monkeypatch.setattr(
+        pool,
+        "get_detailed_sessions",
+        lambda: [{"phone": "+123456789", "status": "active", "is_authorized": True}]
+    )
+    monkeypatch.setattr(migration_manager, "is_running", False)
+
+    res = client.post("/api/migrate/batch", json={"delay": 1.0, "skip_existing": True})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "already_completed"
+    assert data["skipped_existing_count"] == 1
+    assert data["total_accounts"] == 0
+
+

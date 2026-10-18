@@ -85,7 +85,8 @@ class MigrationJobManager:
         phones: List[str],
         two_fa_passwords: Optional[Dict[str, str]] = None,
         delay: float = 15.0,
-        proxy: Optional[str] = None
+        proxy: Optional[str] = None,
+        skip_existing: bool = False
     ) -> bool:
         """Starts batch migration in the background."""
         async with self._lock:
@@ -99,7 +100,7 @@ class MigrationJobManager:
             self.logs = []
             self.current_phone = None
 
-        asyncio.create_task(self._run_batch_worker(phones, two_fa_passwords or {}, delay, proxy))
+        asyncio.create_task(self._run_batch_worker(phones, two_fa_passwords or {}, delay, proxy, skip_existing))
         return True
 
     async def _run_batch_worker(
@@ -107,7 +108,8 @@ class MigrationJobManager:
         phones: List[str],
         passwords: Dict[str, str],
         delay: float,
-        proxy: Optional[str] = None
+        proxy: Optional[str] = None,
+        skip_existing: bool = False
     ) -> None:
         try:
             from server.proxy_service import parse_telethon_proxy
@@ -123,6 +125,24 @@ class MigrationJobManager:
             self._add_log(f"Starting batch migration for {len(phones)} accounts...")
 
             for idx, phone in enumerate(phones, start=1):
+                clean_phone = phone.strip().replace(" ", "")
+                session_name = clean_phone.lstrip("+")
+
+                if skip_existing:
+                    target_file_no_plus = self.settings.target_sessions_dir / f"{session_name}.session"
+                    target_file_plus = self.settings.target_sessions_dir / f"+{session_name}.session"
+                    if target_file_no_plus.exists() or target_file_plus.exists():
+                        target_name = target_file_no_plus.name if target_file_no_plus.exists() else target_file_plus.name
+                        self.results.append({
+                            "phone": phone,
+                            "success": True,
+                            "detail": f"از قبل موجود بود ({target_name})",
+                            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        })
+                        self._add_log(f"[{idx}/{len(phones)}] ⏭️ سشن {phone} از قبل ساخته شده بود ({target_name})، رد شد.")
+                        self.progress = idx
+                        continue
+
                 self.current_phone = phone
                 self.status_text = f"در حال پردازش {phone} ({idx}/{len(phones)})..."
                 pwd = (

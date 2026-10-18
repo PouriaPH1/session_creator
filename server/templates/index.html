@@ -607,6 +607,14 @@
           </select>
         </div>
 
+        <div id="single-migrate-existing-warning" class="hidden p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] items-start gap-2">
+          <i class="ph-bold ph-warning text-base flex-shrink-0 mt-0.5"></i>
+          <div>
+            <span class="font-bold block">سشن این شماره قبلاً در سرور مقصد ساخته شده است.</span>
+            <span>در صورت ادامه، سشن قبلی جایگزین (Overwrite) خواهد شد.</span>
+          </div>
+        </div>
+
         <div>
           <div class="flex items-center justify-between mb-1">
             <label class="block text-slate-300">رمز دو مرحله‌ای (۲FA):</label>
@@ -628,18 +636,43 @@
 
   <!-- Batch Migrate Modal -->
   <div id="batch-migrate-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-    <div class="glass rounded-2xl max-w-sm w-full p-6 space-y-4 border border-indigo-500/40 animate-in fade-in zoom-in-95 duration-200">
+    <div class="glass rounded-2xl max-w-md w-full p-6 space-y-4 border border-indigo-500/40 animate-in fade-in zoom-in-95 duration-200">
       <div class="flex items-center justify-between border-b border-slate-800 pb-3">
         <h3 class="text-sm font-bold text-white flex items-center gap-2">
           <i class="ph-bold ph-play-circle text-indigo-400 text-lg"></i>
-          ساخت دسته‌جمعی تمام سشن‌ها
+          ساخت دسته‌جمعی سشن‌ها
         </h3>
         <button onclick="closeBatchMigrateModal()" class="text-slate-400 hover:text-white transition">
           <i class="ph-bold ph-x text-lg"></i>
         </button>
       </div>
 
+      <!-- Live summary stats of existing vs new -->
+      <div class="grid grid-cols-3 gap-2 bg-slate-900/60 p-3 rounded-xl border border-slate-800 text-center">
+        <div>
+          <span class="text-[10px] text-slate-400 block">سشن‌های سالم</span>
+          <span id="batch-total-healthy-count" class="font-mono text-xs font-bold text-slate-200">۰</span>
+        </div>
+        <div>
+          <span class="text-[10px] text-emerald-400 block">از قبل ساخته‌شده</span>
+          <span id="batch-existing-count" class="font-mono text-xs font-bold text-emerald-300">۰</span>
+        </div>
+        <div>
+          <span class="text-[10px] text-indigo-400 block">جدید (نیاز به ساخت)</span>
+          <span id="batch-new-count" class="font-mono text-xs font-bold text-indigo-300">۰</span>
+        </div>
+      </div>
+
       <div class="space-y-3 text-xs">
+        <!-- Skip Existing Checkbox Option -->
+        <div class="bg-indigo-950/30 p-3 rounded-xl border border-indigo-500/30 flex items-start gap-2.5">
+          <input type="checkbox" id="batch-migrate-skip-existing" checked onchange="updateBatchMigrateButtonText()" class="mt-0.5 rounded bg-slate-800 border-indigo-500/50 text-indigo-500 focus:ring-0 focus:ring-offset-0 w-4 h-4 cursor-pointer">
+          <label for="batch-migrate-skip-existing" class="cursor-pointer text-slate-200 select-none">
+            <span class="font-bold block text-white text-xs">فقط ساخت سشن‌های جدید (سشن‌های موجود رد شوند)</span>
+            <span class="text-[11px] text-slate-400 block mt-0.5 leading-relaxed">اگر فعال باشد، اکانت‌هایی که قبلاً سشن‌شان در سرور مقصد ساخته شده نادیده گرفته می‌شوند و دوباره برایشان کد ارسال نمی‌شود.</span>
+          </label>
+        </div>
+
         <div>
           <label class="block text-slate-300 mb-1">انتخاب سرور / پروکسی مقصد برای ساخت:</label>
           <select id="batch-migrate-proxy-select" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
@@ -654,7 +687,7 @@
           <p class="text-[10px] text-slate-400 mt-1">پیشنهاد می‌شود جهت امنیت اکانت‌ها حداقل ۱۰ تا ۱۵ ثانیه باشد.</p>
         </div>
 
-        <button onclick="confirmBatchMigrate()" class="w-full py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/30">
+        <button id="batch-migrate-submit-btn" onclick="confirmBatchMigrate()" class="w-full py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/30">
           <i class="ph-bold ph-play"></i>
           شروع ساخت تمام سشن‌ها
         </button>
@@ -1479,7 +1512,69 @@
 
     function openBatchMigrateModal() {
       populateProxyDropdown();
+
+      // Calculate counts of healthy, existing, and new
+      const healthyPhones = allSourceSessions.filter(s => s.is_authorized && s.status === 'active' && s.phone && !['N/A', 'Deactivated', 'Error', 'Unknown'].includes(s.phone));
+      const targetPhoneSet = new Set();
+      allTargetSessions.forEach(t => {
+        if (t.phone) {
+          const tp = t.phone.trim();
+          targetPhoneSet.add(tp);
+          targetPhoneSet.add(tp.replace('+', ''));
+          targetPhoneSet.add('+' + tp.replace('+', ''));
+        }
+        if (t.filename) {
+          const stem = t.filename.replace('.session', '').trim();
+          targetPhoneSet.add(stem);
+          targetPhoneSet.add(stem.replace('+', ''));
+          targetPhoneSet.add('+' + stem.replace('+', ''));
+        }
+      });
+
+      let existingCount = 0;
+      let newCount = 0;
+      healthyPhones.forEach(s => {
+        const p = s.phone.trim();
+        const pNoPlus = p.replace('+', '');
+        const pPlus = '+' + pNoPlus;
+        if (targetPhoneSet.has(p) || targetPhoneSet.has(pNoPlus) || targetPhoneSet.has(pPlus)) {
+          existingCount++;
+        } else {
+          newCount++;
+        }
+      });
+
+      document.getElementById('batch-total-healthy-count').innerText = healthyPhones.length;
+      document.getElementById('batch-existing-count').innerText = existingCount;
+      document.getElementById('batch-new-count').innerText = newCount;
+
+      updateBatchMigrateButtonText();
       document.getElementById('batch-migrate-modal').classList.remove('hidden');
+    }
+
+    function updateBatchMigrateButtonText() {
+      const skipExisting = document.getElementById('batch-migrate-skip-existing').checked;
+      const newCount = parseInt(document.getElementById('batch-new-count').innerText) || 0;
+      const totalCount = parseInt(document.getElementById('batch-total-healthy-count').innerText) || 0;
+      const btn = document.getElementById('batch-migrate-submit-btn');
+
+      if (!btn) return;
+
+      if (skipExisting) {
+        if (newCount === 0) {
+          btn.innerHTML = '<i class="ph-bold ph-check-circle"></i> همه سشن‌ها از قبل ساخته شده‌اند';
+          btn.disabled = true;
+          btn.classList.add('opacity-50', 'cursor-not-allowed');
+        } else {
+          btn.innerHTML = `<i class="ph-bold ph-play"></i> شروع ساخت (${newCount} سشن جدید)`;
+          btn.disabled = false;
+          btn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+      } else {
+        btn.innerHTML = `<i class="ph-bold ph-arrows-clockwise"></i> ساخت مجدد همه (${totalCount} سشن)`;
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
     }
 
     function closeBatchMigrateModal() {
@@ -1493,6 +1588,7 @@
     async function confirmBatchMigrate() {
       const delay = parseFloat(document.getElementById('batch-migrate-delay').value) || 15;
       const proxy = document.getElementById('batch-migrate-proxy-select').value;
+      const skipExisting = document.getElementById('batch-migrate-skip-existing').checked;
 
       closeBatchMigrateModal();
 
@@ -1502,14 +1598,19 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             delay: delay,
-            proxy: proxy || null
+            proxy: proxy || null,
+            skip_existing: skipExisting
           })
         });
         const data = await res.json();
         if (res.ok) {
-          checkMigrationStatus();
+          if (data.status === 'already_completed') {
+            alert("اطلاعیه:\n" + data.message);
+          } else {
+            checkMigrationStatus();
+          }
         } else {
-          alert("خطا در اجرای فرآیند: " + data.detail);
+          alert("خطا در اجرای فرآیند: " + (data.detail || JSON.stringify(data)));
         }
       } catch (e) {
         alert("خطا در درخواست ساخت سشن: " + e);
@@ -1828,6 +1929,27 @@
         badge.classList.add('hidden');
         badge.classList.remove('flex');
         badge.innerHTML = '';
+      }
+
+      // Check if target session already exists
+      const cleanPhone = phone.trim().replace(" ", "");
+      const cleanNoPlus = cleanPhone.replace(/^\+/, '');
+      const withPlus = `+${cleanNoPlus}`;
+      const existingWarning = document.getElementById('single-migrate-existing-warning');
+      const alreadyExists = allTargetSessions.some(t => {
+        const tp = (t.phone || '').trim();
+        const tStem = (t.filename || '').replace('.session', '').trim();
+        return [tp, tStem].some(val => [cleanPhone, cleanNoPlus, withPlus].includes(val));
+      });
+
+      if (existingWarning) {
+        if (alreadyExists) {
+          existingWarning.classList.remove('hidden');
+          existingWarning.classList.add('flex');
+        } else {
+          existingWarning.classList.add('hidden');
+          existingWarning.classList.remove('flex');
+        }
       }
 
       document.getElementById('single-migrate-modal').classList.remove('hidden');
