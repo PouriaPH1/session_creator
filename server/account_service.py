@@ -215,7 +215,20 @@ class AccountManagementService:
         Generates and assigns unique secure 2FA passwords to all (or selected) accounts.
         Saves all generated passwords into storage/passwords.json.
         """
-        target_identifiers = identifiers or self.pool.list_sessions()
+        detailed = self.pool.get_detailed_sessions()
+        authorized_phones = {
+            s["phone"] for s in detailed if s.get("is_authorized") and s.get("status") == "active"
+        }
+        authorized_names = {
+            s["session_name"] for s in detailed if s.get("is_authorized") and s.get("status") == "active"
+        }
+        valid_set = authorized_phones | authorized_names
+
+        candidates = identifiers or [s["phone"] for s in detailed if s.get("is_authorized") and s.get("status") == "active"]
+        target_identifiers = [
+            ident for ident in candidates
+            if ident in valid_set or ident.lstrip("+") in valid_set or f"+{ident.lstrip('+')}" in valid_set
+        ]
         results = []
 
         logger.info(f"Starting batch 2FA assignment for {len(target_identifiers)} account(s)...")
@@ -261,7 +274,20 @@ class AccountManagementService:
         delay: float = 1.5
     ) -> List[Dict[str, Any]]:
         """Sets random natural personas (names) on accounts."""
-        target_identifiers = identifiers or self.pool.list_sessions()
+        detailed = self.pool.get_detailed_sessions()
+        authorized_phones = {
+            s["phone"] for s in detailed if s.get("is_authorized") and s.get("status") == "active"
+        }
+        authorized_names = {
+            s["session_name"] for s in detailed if s.get("is_authorized") and s.get("status") == "active"
+        }
+        valid_set = authorized_phones | authorized_names
+
+        candidates = identifiers or [s["phone"] for s in detailed if s.get("is_authorized") and s.get("status") == "active"]
+        target_identifiers = [
+            ident for ident in candidates
+            if ident in valid_set or ident.lstrip("+") in valid_set or f"+{ident.lstrip('+')}" in valid_set
+        ]
         results = []
 
         first_names = PERSIAN_FIRST_NAMES if locale == "fa" else ENGLISH_FIRST_NAMES

@@ -409,6 +409,18 @@ async def migrate_single(req: SingleMigrateRequest):
     if migration_manager.is_running:
         raise HTTPException(status_code=400, detail="A migration job is already running.")
 
+    # Validate that session is authorized and active
+    detailed = pool.get_detailed_sessions()
+    target_info = next(
+        (s for s in detailed if s.get("phone") in (req.phone, req.phone.lstrip("+"), f"+{req.phone.lstrip('+')}") or s.get("session_name") == req.phone),
+        None
+    )
+    if target_info and not target_info.get("is_authorized"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"سشن {req.phone} غیرمجاز، دی‌اکتیو یا دارای مشکل است و امکان ساخت سشن از آن وجود ندارد."
+        )
+
     effective_proxy = req.proxy or proxy_service.get_default_proxy()
     pwd = req.password
     if not pwd:
@@ -438,10 +450,14 @@ async def migrate_batch(req: BatchMigrateRequest):
         raise HTTPException(status_code=400, detail="A migration job is already running.")
 
     detailed_sessions = pool.get_detailed_sessions()
-    active_phones = [s["phone"] for s in detailed_sessions if s.get("is_authorized") and s["phone"] != "N/A"]
+    active_phones = [
+        s["phone"] for s in detailed_sessions
+        if s.get("is_authorized") and s.get("status") == "active" and s.get("phone") not in ("N/A", "Deactivated", "Error", "Unknown")
+    ]
+    faulty_count = len([s for s in detailed_sessions if not s.get("is_authorized") or s.get("status") != "active"])
 
     if not active_phones:
-        raise HTTPException(status_code=400, detail="No active authorized sessions found to migrate.")
+        raise HTTPException(status_code=400, detail="هیچ سشن سالم و فعالی برای ساخت سشن یافت نشد.")
 
     effective_proxy = req.proxy or proxy_service.get_default_proxy()
 
@@ -469,6 +485,7 @@ async def migrate_batch(req: BatchMigrateRequest):
     return {
         "status": "started",
         "total_accounts": len(active_phones),
+        "skipped_faulty_count": faulty_count,
         "delay": req.delay,
         "proxy_used": effective_proxy
     }

@@ -180,6 +180,32 @@
             </div>
           </div>
 
+          <!-- Category Filter Pills & Search Input -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-slate-800/60">
+            <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs" id="source-filter-pills">
+              <button onclick="filterSourceSessions('all')" id="pill-src-all" class="px-3 py-1.5 rounded-xl font-semibold bg-indigo-600 text-white shadow-sm transition shrink-0 flex items-center gap-1.5">
+                <span>همه سشن‌ها</span>
+                <span id="count-src-all" class="bg-indigo-700/60 px-2 py-0.5 rounded-full text-[11px] font-mono">۰</span>
+              </button>
+              <button onclick="filterSourceSessions('healthy')" id="pill-src-healthy" class="px-3 py-1.5 rounded-xl font-semibold bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800 transition shrink-0 flex items-center gap-1.5">
+                <i class="ph-bold ph-check-circle text-emerald-400"></i>
+                <span>سالم و فعال</span>
+                <span id="count-src-healthy" class="bg-emerald-500/20 px-2 py-0.5 rounded-full text-[11px] text-emerald-300 font-mono">۰</span>
+              </button>
+              <button onclick="filterSourceSessions('faulty')" id="pill-src-faulty" class="px-3 py-1.5 rounded-xl font-semibold bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800 transition shrink-0 flex items-center gap-1.5">
+                <i class="ph-bold ph-warning-circle text-rose-400"></i>
+                <span>مشکل‌دار و منقضی</span>
+                <span id="count-src-faulty" class="bg-rose-500/20 px-2 py-0.5 rounded-full text-[11px] text-rose-300 font-mono">۰</span>
+              </button>
+            </div>
+
+            <!-- Search input -->
+            <div class="relative w-full sm:w-64">
+              <i class="ph-bold ph-magnifying-glass absolute right-3 top-2.5 text-slate-400 text-sm"></i>
+              <input type="text" id="src-search-input" oninput="handleSourceSearch(event)" placeholder="جستجوی شماره، نام یا مدل..." class="w-full bg-slate-900/80 border border-slate-800 rounded-xl pr-9 pl-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition">
+            </div>
+          </div>
+
           <!-- Table Container -->
           <div class="overflow-x-auto border border-slate-800/80 rounded-xl">
             <table class="w-full text-right text-xs">
@@ -198,6 +224,24 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          <!-- Pagination Footer -->
+          <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1 text-xs text-slate-400" id="source-pagination-container">
+            <div class="flex items-center gap-2">
+              <span>تعداد در صفحه:</span>
+              <select id="src-page-size-select" onchange="changeSourcePageSize(this.value)" class="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-indigo-500">
+                <option value="10" selected>۱۰</option>
+                <option value="25">۲۵</option>
+                <option value="50">۵۰</option>
+                <option value="100">۱۰۰</option>
+              </select>
+              <span id="src-pagination-info" class="text-slate-400 font-mono mr-2">نمایش ۰ تا ۰ از ۰ سشن</span>
+            </div>
+
+            <div class="flex items-center gap-1" id="src-pagination-buttons">
+              <!-- Dynamically populated page buttons -->
+            </div>
           </div>
         </div>
 
@@ -637,64 +681,234 @@
       }
     }
 
+    let allSourceSessions = [];
+    let currentSourceFilter = 'all'; // 'all', 'healthy', 'faulty'
+    let currentSourceSearch = '';
+    let currentSourcePage = 1;
+    let sourcePageSize = 10;
+
     async function loadSourceSessions() {
       try {
         const res = await fetch('/api/sessions/source');
-        const list = await res.json();
-        const tbody = document.getElementById('source-sessions-tbody');
+        allSourceSessions = await res.json();
+        if (!allSourceSessions) allSourceSessions = [];
 
-        if (!list || list.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-500">هیچ سشنی یافت نشد. فایل‌های .session را داخل پوشه منبع قرار دهید یا از باکس آپلود استفاده کنید.</td></tr>`;
-          return;
+        // Count categories
+        const total = allSourceSessions.length;
+        const healthy = allSourceSessions.filter(s => s.is_authorized && s.status === 'active').length;
+        const faulty = allSourceSessions.filter(s => !s.is_authorized || s.status !== 'active').length;
+
+        const countAllEl = document.getElementById('count-src-all');
+        const countHealthyEl = document.getElementById('count-src-healthy');
+        const countFaultyEl = document.getElementById('count-src-faulty');
+
+        if (countAllEl) countAllEl.innerText = total;
+        if (countHealthyEl) countHealthyEl.innerText = healthy;
+        if (countFaultyEl) countFaultyEl.innerText = faulty;
+
+        renderSourceSessions();
+      } catch (e) {
+        console.error("Error loading source sessions:", e);
+      }
+    }
+
+    function filterSourceSessions(filterType) {
+      currentSourceFilter = filterType;
+      currentSourcePage = 1;
+
+      const btnAll = document.getElementById('pill-src-all');
+      const btnHealthy = document.getElementById('pill-src-healthy');
+      const btnFaulty = document.getElementById('pill-src-faulty');
+
+      const activeClasses = 'px-3 py-1.5 rounded-xl font-semibold bg-indigo-600 text-white shadow-sm transition shrink-0 flex items-center gap-1.5';
+      const inactiveClasses = 'px-3 py-1.5 rounded-xl font-semibold bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800 transition shrink-0 flex items-center gap-1.5';
+
+      if (btnAll) btnAll.className = (filterType === 'all') ? activeClasses : inactiveClasses;
+      if (btnHealthy) btnHealthy.className = (filterType === 'healthy') ? activeClasses : inactiveClasses;
+      if (btnFaulty) btnFaulty.className = (filterType === 'faulty') ? activeClasses : inactiveClasses;
+
+      renderSourceSessions();
+    }
+
+    function handleSourceSearch(event) {
+      currentSourceSearch = (event.target.value || '').trim().toLowerCase();
+      currentSourcePage = 1;
+      renderSourceSessions();
+    }
+
+    function changeSourcePageSize(val) {
+      sourcePageSize = parseInt(val, 10) || 10;
+      currentSourcePage = 1;
+      renderSourceSessions();
+    }
+
+    function goToSourcePage(pageNum) {
+      currentSourcePage = pageNum;
+      renderSourceSessions();
+    }
+
+    function renderSourceSessions() {
+      const tbody = document.getElementById('source-sessions-tbody');
+      if (!tbody) return;
+
+      // Filter list
+      const filtered = allSourceSessions.filter(item => {
+        // Status filter
+        if (currentSourceFilter === 'healthy') {
+          if (!item.is_authorized || item.status !== 'active') return false;
+        } else if (currentSourceFilter === 'faulty') {
+          if (item.is_authorized && item.status === 'active') return false;
         }
 
-        tbody.innerHTML = list.map(item => `
-          <tr class="hover:bg-slate-900/40 transition">
+        // Search query
+        if (currentSourceSearch) {
+          const ph = (item.phone || '').toLowerCase();
+          const sn = (item.session_name || '').toLowerCase();
+          const fn = (item.first_name || '').toLowerCase();
+          const un = (item.username || '').toLowerCase();
+          const dm = (item.device_model || '').toLowerCase();
+          if (!ph.includes(currentSourceSearch) && !sn.includes(currentSourceSearch) && !fn.includes(currentSourceSearch) && !un.includes(currentSourceSearch) && !dm.includes(currentSourceSearch)) {
+            return false;
+          }
+        }
+        return true;
+      });
+
+      const totalFiltered = filtered.length;
+      const totalPages = Math.max(1, Math.ceil(totalFiltered / sourcePageSize));
+      if (currentSourcePage > totalPages) currentSourcePage = totalPages;
+      if (currentSourcePage < 1) currentSourcePage = 1;
+
+      const startIdx = (currentSourcePage - 1) * sourcePageSize;
+      const endIdx = Math.min(startIdx + sourcePageSize, totalFiltered);
+      const pageItems = filtered.slice(startIdx, endIdx);
+
+      // Render Pagination Info
+      const infoEl = document.getElementById('src-pagination-info');
+      if (infoEl) {
+        if (totalFiltered === 0) {
+          infoEl.innerText = 'هیچ موردی یافت نشد';
+        } else {
+          infoEl.innerText = `نمایش ${startIdx + 1} تا ${endIdx} از ${totalFiltered} سشن`;
+        }
+      }
+
+      // Render Pagination Buttons
+      renderSourcePaginationButtons(totalPages);
+
+      if (totalFiltered === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500">
+          <i class="ph-bold ph-tray text-3xl mb-1 text-slate-600 block"></i>
+          هیچ سشنی در این دسته‌بندی یافت نشد.
+        </td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = pageItems.map(item => {
+        const isHealthy = item.is_authorized && item.status === 'active';
+        const statusLabel = isHealthy ? 'فعال و سالم' : (item.status === 'deactivated' ? 'دی‌اکتیو شده' : (item.status === 'error' ? 'خطای اتصال' : 'غیرمجاز / منقضی'));
+        const statusClass = isHealthy ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30';
+        const rowClass = isHealthy ? 'hover:bg-slate-900/40 transition' : 'hover:bg-rose-950/20 bg-rose-950/10 transition opacity-80';
+
+        // Disable operational buttons if session is faulty
+        const disabledAttr = isHealthy ? '' : 'disabled';
+        const disabledClass = isHealthy ? '' : 'opacity-30 cursor-not-allowed pointer-events-none';
+
+        return `
+          <tr class="${rowClass}">
             <td class="p-3">
-              <span class="font-mono text-sky-300 font-bold">${item.phone}</span>
+              <span class="font-mono text-sky-300 font-bold">${item.phone || 'N/A'}</span>
               <p class="font-mono text-[10px] text-slate-500">${item.session_name}</p>
             </td>
             <td class="p-3">
               <span class="font-semibold text-white">${item.first_name || 'بدون نام'}</span>
-              ${item.username ? `<p class="text-[10px] text-indigo-400">@${item.username}</p>` : ''}
+              ${item.username ? `<p class="text-[10px] text-indigo-400 font-mono">@${item.username}</p>` : ''}
             </td>
             <td class="p-3 text-slate-400 text-[11px]">${item.device_model || '-'}</td>
             <td class="p-3">
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${item.is_authorized ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}">
-                ${item.is_authorized ? 'فعال' : 'غیرمجاز / منقضی'}
+              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold border inline-flex items-center gap-1 ${statusClass}">
+                <i class="ph-bold ${isHealthy ? 'ph-check-circle' : 'ph-warning-circle'} text-xs"></i>
+                ${statusLabel}
               </span>
             </td>
             <td class="p-3 text-center">
               <div class="flex items-center justify-center gap-1.5 flex-wrap">
-                <button onclick="openProfileModal('${item.phone}', '${escapeHtml(item.first_name || '')}')" title="ویرایش نام و عکس پروفایل" class="px-2 py-1 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 transition flex items-center gap-1">
+                <button onclick="openProfileModal('${item.phone}', '${escapeHtml(item.first_name || '')}')" title="${isHealthy ? 'ویرایش نام و عکس پروفایل' : 'غیرقابل ویرایش (سشن مشکل‌دار)'}" ${disabledAttr} class="px-2 py-1 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 transition flex items-center gap-1 ${disabledClass}">
                   <i class="ph-bold ph-user"></i> پروفایل
                 </button>
-                <button onclick="open2FAModal('${item.phone}')" title="تنظیم رمز دومرحله‌ای" class="px-2 py-1 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 transition flex items-center gap-1">
+                <button onclick="open2FAModal('${item.phone}')" title="${isHealthy ? 'تنظیم رمز دومرحله‌ای' : 'غیرقابل تنظیم (سشن مشکل‌دار)'}" ${disabledAttr} class="px-2 py-1 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 transition flex items-center gap-1 ${disabledClass}">
                   <i class="ph-bold ph-lock-key"></i> ۲FA
                 </button>
-                <button onclick="getOTP('${item.phone}')" title="دریافت کد تایید تلگرام" class="px-2 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition flex items-center gap-1">
+                <button onclick="getOTP('${item.phone}')" title="${isHealthy ? 'دریافت کد تایید تلگرام' : 'غیرقابل دریافت (سشن مشکل‌دار)'}" ${disabledAttr} class="px-2 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition flex items-center gap-1 ${disabledClass}">
                   <i class="ph-bold ph-key"></i> کد
                 </button>
-                <button onclick="terminateSessions('${item.phone}')" title="خروج از سایر نشست‌ها" class="p-1 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 transition">
+                <button onclick="terminateSessions('${item.phone}')" title="${isHealthy ? 'خروج از سایر نشست‌ها' : 'غیرقابل انجام'}" ${disabledAttr} class="p-1 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 transition ${disabledClass}">
                   <i class="ph-bold ph-shield-slash"></i>
                 </button>
-                <button onclick="checkSpamBot('${item.phone}')" title="بررسی محدودیت اکانت با SpamBot" class="p-1 rounded-lg bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 border border-teal-500/30 transition">
+                <button onclick="checkSpamBot('${item.phone}')" title="${isHealthy ? 'بررسی محدودیت اکانت با SpamBot' : 'غیرقابل استعلام'}" ${disabledAttr} class="p-1 rounded-lg bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 border border-teal-500/30 transition ${disabledClass}">
                   <i class="ph-bold ph-robot"></i>
                 </button>
-                <button onclick="migrateSingle('${item.phone}')" title="مهاجرت تکی" class="px-2 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition flex items-center gap-1">
+                <button onclick="migrateSingle('${item.phone}')" title="${isHealthy ? 'ساخت سشن با آی‌پی جدید' : 'این سشن مشکل‌دار است و امکان ساخت سشن ندارد'}" ${disabledAttr} class="px-2 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition flex items-center gap-1 ${disabledClass}">
                   <i class="ph-bold ph-lightning"></i> ساخت
                 </button>
-                <button onclick="deleteSourceSession('${item.session_name}')" title="حذف" class="p-1 rounded-lg bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 border border-rose-500/20 transition">
+                <button onclick="deleteSourceSession('${item.session_name}')" title="حذف این سشن از پنل" class="p-1 rounded-lg bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 border border-rose-500/20 transition">
                   <i class="ph-bold ph-trash"></i>
                 </button>
               </div>
             </td>
           </tr>
-        `).join('');
+        `;
+      }).join('');
+    }
 
-      } catch (e) {
-        console.error("Error loading source sessions:", e);
+    function renderSourcePaginationButtons(totalPages) {
+      const container = document.getElementById('src-pagination-buttons');
+      if (!container) return;
+
+      if (totalPages <= 1) {
+        container.innerHTML = '';
+        return;
       }
+
+      let html = '';
+
+      // Prev Button
+      const prevDisabled = currentSourcePage <= 1 ? 'opacity-30 cursor-not-allowed pointer-events-none' : 'hover:bg-slate-800 text-slate-300';
+      html += `
+        <button onclick="goToSourcePage(${currentSourcePage - 1})" ${currentSourcePage <= 1 ? 'disabled' : ''} class="px-2.5 py-1 rounded-lg border border-slate-800 bg-slate-900 transition flex items-center gap-1 text-[11px] ${prevDisabled}">
+          <i class="ph-bold ph-caret-right"></i> قبلی
+        </button>
+      `;
+
+      // Page numbers (smart window around current page)
+      const maxButtons = 5;
+      let startP = Math.max(1, currentSourcePage - 2);
+      let endP = Math.min(totalPages, startP + maxButtons - 1);
+      if (endP - startP < maxButtons - 1) {
+        startP = Math.max(1, endP - maxButtons + 1);
+      }
+
+      for (let p = startP; p <= endP; p++) {
+        const isCurrent = p === currentSourcePage;
+        const btnClass = isCurrent
+          ? 'bg-indigo-600 text-white font-bold border-indigo-500'
+          : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border-slate-800';
+        html += `
+          <button onclick="goToSourcePage(${p})" class="w-7 h-7 rounded-lg border transition text-[11px] font-mono flex items-center justify-center ${btnClass}">
+            ${p}
+          </button>
+        `;
+      }
+
+      // Next Button
+      const nextDisabled = currentSourcePage >= totalPages ? 'opacity-30 cursor-not-allowed pointer-events-none' : 'hover:bg-slate-800 text-slate-300';
+      html += `
+        <button onclick="goToSourcePage(${currentSourcePage + 1})" ${currentSourcePage >= totalPages ? 'disabled' : ''} class="px-2.5 py-1 rounded-lg border border-slate-800 bg-slate-900 transition flex items-center gap-1 text-[11px] ${nextDisabled}">
+          بعدی <i class="ph-bold ph-caret-left"></i>
+        </button>
+      `;
+
+      container.innerHTML = html;
     }
 
     function escapeHtml(text) {
