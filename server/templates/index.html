@@ -46,6 +46,10 @@
         </div>
       </div>
       <div class="flex items-center gap-3">
+        <button onclick="openProxiesModal()" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-purple-600/10 hover:bg-purple-600/20 text-purple-300 transition-all border border-purple-500/30 flex items-center gap-1.5">
+          <i class="ph-bold ph-globe-hemisphere-west text-sm"></i>
+          <span id="header-proxy-indicator">پروکسی: مستقیم (آی‌پی سرور)</span>
+        </button>
         <button onclick="reloadPool()" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition-all border border-slate-700 flex items-center gap-1.5">
           <i class="ph-bold ph-arrows-clockwise text-sm"></i>
           بارگذاری مجدد
@@ -157,6 +161,11 @@
               <button onclick="openPasswordsModal()" title="مشاهده و استخراج پسوردهای ذخیره‌شده" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition flex items-center gap-1.5 shadow-sm">
                 <i class="ph-bold ph-list-dashes"></i>
                 لیست پسوردها
+              </button>
+
+              <button onclick="openProxiesModal()" title="تنظیم پروکسی‌های SOCKS5 جهت ساخت سشن با آی‌پی‌های دلخواه" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 transition flex items-center gap-1.5 shadow-sm">
+                <i class="ph-bold ph-globe-hemisphere-west"></i>
+                مدیریت پروکسی‌ها
               </button>
 
               <button onclick="startBatchMigrationPrompt()" class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md shadow-indigo-600/30 flex items-center gap-1.5">
@@ -424,6 +433,116 @@
     </div>
   </div>
 
+  <!-- Proxies Management Modal -->
+  <div id="proxies-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass rounded-2xl max-w-2xl w-full p-6 space-y-4 border border-purple-500/40 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i class="ph-bold ph-globe-hemisphere-west text-purple-400 text-lg"></i>
+          مدیریت پروکسی‌ها (SOCKS5 / HTTP)
+        </h3>
+        <button onclick="closeProxiesModal()" class="text-slate-400 hover:text-white transition">
+          <i class="ph-bold ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Add Proxy Form -->
+      <div class="bg-slate-900/80 rounded-xl p-4 border border-slate-800 space-y-3">
+        <p class="text-xs font-semibold text-slate-300">افزودن پروکسی جدید:</p>
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 text-xs">
+          <div class="sm:col-span-4">
+            <input type="text" id="new-proxy-name" placeholder="نام نمایشی (مثلاً: سرور آلمان)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500">
+          </div>
+          <div class="sm:col-span-8">
+            <input type="text" id="new-proxy-url" placeholder="socks5://user:pass@host:port یا host:port" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono placeholder-slate-500 focus:outline-none focus:border-purple-500">
+          </div>
+        </div>
+        <div class="flex items-center justify-between gap-2 pt-1">
+          <div id="proxy-test-result" class="text-xs font-mono text-slate-400 truncate"></div>
+          <div class="flex items-center gap-2">
+            <button onclick="testNewProxyInput()" id="btn-test-proxy" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1">
+              <i class="ph-bold ph-lightning"></i> تست زنده
+            </button>
+            <button onclick="addNewProxy()" class="px-4 py-1.5 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white transition flex items-center gap-1 shadow-md shadow-purple-600/30">
+              <i class="ph-bold ph-plus"></i> ذخیره پروکسی
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Command Tip for Server 2 -->
+      <div class="bg-indigo-950/30 border border-indigo-500/20 rounded-xl p-3 text-[11px] text-indigo-300 flex items-start gap-2">
+        <i class="ph-bold ph-info text-base mt-0.5 text-indigo-400 shrink-0"></i>
+        <div>
+          <span class="font-bold">تبدیل هر سرور به پروکسی در ۱۰ ثانیه:</span>
+          با دستور <code class="bg-indigo-900/50 px-1 py-0.5 rounded text-indigo-200 font-mono">bash setup_proxy_server.sh</code> روی سرور دوم، یک پروکسی اختصاصی SOCKS5 فعال شده و آدرس نهایی جهت کپی در کادر بالا چاپ می‌شود.
+        </div>
+      </div>
+
+      <!-- Proxies List Table -->
+      <div class="overflow-y-auto flex-1 border border-slate-800 rounded-xl">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-900/80 text-slate-400 font-semibold border-b border-slate-800 sticky top-0">
+            <tr>
+              <th class="p-3">پیش‌فرض</th>
+              <th class="p-3">نام</th>
+              <th class="p-3">آدرس پروکسی</th>
+              <th class="p-3">آی‌پی شناسایی‌شده</th>
+              <th class="p-3">وضعیت / پینگ</th>
+              <th class="p-3 text-center">عملیات</th>
+            </tr>
+          </thead>
+          <tbody id="proxies-table-body" class="divide-y divide-slate-800/60 text-slate-300">
+            <tr>
+              <td colspan="6" class="p-6 text-center text-slate-500">در حال بارگذاری پروکسی‌ها...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Single Migrate Modal -->
+  <div id="single-migrate-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass rounded-2xl max-w-sm w-full p-6 space-y-4 border border-emerald-500/40 animate-in fade-in zoom-in-95 duration-200">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i class="ph-bold ph-lightning text-emerald-400 text-lg"></i>
+          ساخت سشن تلگرام
+        </h3>
+        <button onclick="closeSingleMigrateModal()" class="text-slate-400 hover:text-white transition">
+          <i class="ph-bold ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <input type="hidden" id="migrate-target-phone">
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-400 mb-1">شماره انتخابی:</label>
+          <div id="migrate-target-phone-badge" class="font-mono text-emerald-300 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800 font-bold"></div>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 mb-1">انتخاب پروکسی / آی‌پی مقصد:</label>
+          <select id="migrate-proxy-select" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500">
+            <option value="">(پیش‌فرض پنل یا مستقیم با آی‌پی سرور)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 mb-1">رمز دو مرحله‌ای (۲FA) - در صورت وجود:</label>
+          <input type="password" id="migrate-target-password" placeholder="اگر رمز ۲FA دارد وارد کنید..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500">
+        </div>
+
+        <button onclick="confirmSingleMigrate()" class="w-full py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/30">
+          <i class="ph-bold ph-play"></i>
+          شروع ساخت سشن
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let pollInterval = null;
 
@@ -432,7 +551,8 @@
         loadStats(),
         loadSourceSessions(),
         loadTargetSessions(),
-        checkMigrationStatus()
+        checkMigrationStatus(),
+        loadProxies()
       ]);
       setInterval(checkMigrationStatus, 3000);
     }
@@ -932,25 +1052,8 @@
       }
     }
 
-    async function migrateSingle(phone) {
-      const pwd = prompt(`اگر اکانت ${phone} دارای پسورد دو مرحله‌ای (2FA) است، آن را وارد کنید (در غیر این صورت خالی بگذارید):`, "");
-      if (pwd === null) return;
-
-      try {
-        const res = await fetch('/api/migrate/single', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: phone, password: pwd || null })
-        });
-        const data = await res.json();
-        if (res.ok) {
-          checkMigrationStatus();
-        } else {
-          alert("خطا: " + data.detail);
-        }
-      } catch (e) {
-        alert("خطا در ارسال درخواست: " + e);
-      }
+    function migrateSingle(phone) {
+      openSingleMigrateModal(phone);
     }
 
     let hideProgressTimeout = null;
@@ -1052,6 +1155,237 @@
 
     function downloadAllZip() {
       window.location.href = '/api/download/target-all-zip';
+    }
+
+    // =======================================================
+    // Proxy Management
+    // =======================================================
+    let savedProxies = [];
+
+    async function loadProxies() {
+      try {
+        const res = await fetch('/api/proxies');
+        savedProxies = await res.json();
+        renderProxiesTable();
+        updateProxyHeaderIndicator();
+        populateProxyDropdown();
+      } catch (e) {
+        console.error("Error loading proxies:", e);
+      }
+    }
+
+    function updateProxyHeaderIndicator() {
+      const el = document.getElementById('header-proxy-indicator');
+      if (!el) return;
+      const def = savedProxies.find(p => p.is_default);
+      if (def) {
+        el.innerText = `پروکسی: ${def.name} (${def.ip || 'فعال'})`;
+      } else {
+        el.innerText = 'پروکسی: مستقیم (آی‌پی سرور)';
+      }
+    }
+
+    function populateProxyDropdown() {
+      const select = document.getElementById('migrate-proxy-select');
+      if (!select) return;
+      select.innerHTML = '<option value="">(مستقیم - آی‌پی سرور مبدأ)</option>' +
+        savedProxies.map(p => `
+          <option value="${p.url}" ${p.is_default ? 'selected' : ''}>
+            ${p.name} ${p.ip ? `(${p.ip})` : ''} ${p.is_default ? '⭐ پیش‌فرض' : ''}
+          </option>
+        `).join('');
+    }
+
+    function openProxiesModal() {
+      loadProxies();
+      document.getElementById('proxies-modal').classList.remove('hidden');
+    }
+
+    function closeProxiesModal() {
+      document.getElementById('proxies-modal').classList.add('hidden');
+    }
+
+    function renderProxiesTable() {
+      const tbody = document.getElementById('proxies-table-body');
+      if (!tbody) return;
+
+      if (!savedProxies || savedProxies.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-500">هیچ پروکسی ثبت نشده است. از فرم بالا برای افزودن پروکسی SOCKS5 استفاده کنید.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = savedProxies.map(p => `
+        <tr class="hover:bg-slate-900/40 transition">
+          <td class="p-3 text-center">
+            <input type="radio" name="default_proxy" onchange="setDefaultProxy('${p.id}')" ${p.is_default ? 'checked' : ''} class="accent-purple-500 cursor-pointer" title="تنظیم به عنوان پروکسی پیش‌فرض">
+          </td>
+          <td class="p-3 font-semibold text-white">${p.name}</td>
+          <td class="p-3 font-mono text-[11px] text-purple-300 select-all">${p.url}</td>
+          <td class="p-3 font-mono text-[11px] text-sky-300 font-bold">${p.ip || '-'}</td>
+          <td class="p-3">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${p.status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : p.status === 'failed' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30' : 'bg-slate-800 text-slate-400'}">
+              ${p.status === 'active' ? `فعال (${p.ping_ms || 0}ms)` : p.status === 'failed' ? 'خطا' : 'تست نشده'}
+            </span>
+          </td>
+          <td class="p-3 text-center">
+            <div class="flex items-center justify-center gap-1.5">
+              <button onclick="testSavedProxy('${p.url}')" title="تست اتصال" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] transition flex items-center gap-1">
+                <i class="ph-bold ph-lightning"></i> تست
+              </button>
+              <button onclick="deleteProxy('${p.id}')" title="حذف" class="p-1 rounded-lg bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 border border-rose-500/20 transition">
+                <i class="ph-bold ph-trash"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function addNewProxy() {
+      const name = document.getElementById('new-proxy-name').value.trim();
+      const url = document.getElementById('new-proxy-url').value.trim();
+      if (!url) {
+        alert("لطفاً آدرس پروکسی را وارد کنید.");
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/proxies', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name || "پروکسی جدید", url: url })
+        });
+        if (res.ok) {
+          document.getElementById('new-proxy-name').value = '';
+          document.getElementById('new-proxy-url').value = '';
+          document.getElementById('proxy-test-result').innerText = '';
+          await loadProxies();
+        } else {
+          alert("خطا در ذخیره پروکسی");
+        }
+      } catch (e) {
+        alert("خطا: " + e);
+      }
+    }
+
+    async function deleteProxy(id) {
+      if (!confirm("آیا از حذف این پروکسی اطمینان دارید؟")) return;
+      try {
+        const res = await fetch(`/api/proxies/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+          await loadProxies();
+        }
+      } catch (e) {
+        alert("خطا: " + e);
+      }
+    }
+
+    async function setDefaultProxy(id) {
+      try {
+        const res = await fetch(`/api/proxies/${id}/default`, { method: 'POST' });
+        if (res.ok) {
+          await loadProxies();
+        }
+      } catch (e) {
+        alert("خطا: " + e);
+      }
+    }
+
+    async function testNewProxyInput() {
+      const url = document.getElementById('new-proxy-url').value.trim();
+      if (!url) {
+        alert("لطفاً ابتدا آدرس پروکسی را در کادر بنویسید.");
+        return;
+      }
+      const resultEl = document.getElementById('proxy-test-result');
+      const btn = document.getElementById('btn-test-proxy');
+      btn.disabled = true;
+      resultEl.innerText = "در حال تست اتصال...";
+      resultEl.className = "text-xs font-mono text-purple-400 animate-pulse truncate";
+
+      try {
+        const res = await fetch('/api/proxies/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: url })
+        });
+        const data = await res.json();
+        if (data.success) {
+          resultEl.innerText = `✅ موفق! آی‌پی: ${data.ip} (${data.ping_ms}ms)`;
+          resultEl.className = "text-xs font-mono text-emerald-400 font-bold truncate";
+        } else {
+          resultEl.innerText = `❌ ${data.error || 'اتصال ناموفق'}`;
+          resultEl.className = "text-xs font-mono text-rose-400 truncate";
+        }
+      } catch (e) {
+        resultEl.innerText = "❌ خطا در اتصال به سرور تست";
+        resultEl.className = "text-xs font-mono text-rose-400 truncate";
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function testSavedProxy(url) {
+      try {
+        alert("در حال تست پروکسی...");
+        const res = await fetch('/api/proxies/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: url })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert(`✅ اتصال موفق!\nآی‌پی خروجی: ${data.ip}\nتاخیر (Ping): ${data.ping_ms}ms`);
+        } else {
+          alert(`❌ خطا در اتصال:\n${data.error}`);
+        }
+        await loadProxies();
+      } catch (e) {
+        alert("خطا در تست: " + e);
+      }
+    }
+
+    // =======================================================
+    // Single Migrate Modal Controls
+    // =======================================================
+    function openSingleMigrateModal(phone) {
+      document.getElementById('migrate-target-phone').value = phone;
+      document.getElementById('migrate-target-phone-badge').innerText = phone;
+      document.getElementById('migrate-target-password').value = '';
+      populateProxyDropdown();
+      document.getElementById('single-migrate-modal').classList.remove('hidden');
+    }
+
+    function closeSingleMigrateModal() {
+      document.getElementById('single-migrate-modal').classList.add('hidden');
+    }
+
+    async function confirmSingleMigrate() {
+      const phone = document.getElementById('migrate-target-phone').value;
+      const pwd = document.getElementById('migrate-target-password').value.trim();
+      const proxy = document.getElementById('migrate-proxy-select').value;
+
+      closeSingleMigrateModal();
+
+      try {
+        const res = await fetch('/api/migrate/single', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: phone,
+            password: pwd || null,
+            proxy: proxy || null
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          checkMigrationStatus();
+        } else {
+          alert("خطا: " + data.detail);
+        }
+      } catch (e) {
+        alert("خطا در ارسال درخواست: " + e);
+      }
     }
 
     // Initialize on load

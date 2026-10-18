@@ -6,3 +6,5 @@ pydantic>=2.6.0
 pydantic-settings>=2.2.0
 python-dotenv>=1.0.0
 python-multipart>=0.0.9
+PySocks>=1.7.1
+socksio>=1.0.0

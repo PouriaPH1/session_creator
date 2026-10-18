@@ -84,7 +84,8 @@ class MigrationJobManager:
         self,
         phones: List[str],
         two_fa_passwords: Optional[Dict[str, str]] = None,
-        delay: float = 15.0
+        delay: float = 15.0,
+        proxy: Optional[str] = None
     ) -> bool:
         """Starts batch migration in the background."""
         async with self._lock:
@@ -98,20 +99,27 @@ class MigrationJobManager:
             self.logs = []
             self.current_phone = None
 
-        asyncio.create_task(self._run_batch_worker(phones, two_fa_passwords or {}, delay))
+        asyncio.create_task(self._run_batch_worker(phones, two_fa_passwords or {}, delay, proxy))
         return True
 
     async def _run_batch_worker(
         self,
         phones: List[str],
         passwords: Dict[str, str],
-        delay: float
+        delay: float,
+        proxy: Optional[str] = None
     ) -> None:
         try:
+            from server.proxy_service import parse_telethon_proxy
+            parsed_proxy = parse_telethon_proxy(proxy) if proxy else None
+
             creator = TelegramSessionCreator(
                 settings=self.settings,
-                otp_client=self.local_otp_client
+                otp_client=self.local_otp_client,
+                proxy=parsed_proxy
             )
+            if proxy:
+                self._add_log(f"🌐 اتصال از طریق پروکسی: {proxy}")
             self._add_log(f"Starting batch migration for {len(phones)} accounts...")
 
             for idx, phone in enumerate(phones, start=1):

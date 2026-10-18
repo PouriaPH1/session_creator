@@ -15,6 +15,7 @@ from core.exceptions import OTPNotFoundError, SessionNotFoundError
 from server.account_service import AccountManagementService
 from server.migration_manager import MigrationJobManager
 from server.otp_service import TelethonOTPService
+from server.proxy_service import ProxyService
 from server.session_pool import TelethonSessionPool
 
 logging.basicConfig(
@@ -28,6 +29,7 @@ pool = TelethonSessionPool(settings)
 otp_service = TelethonOTPService(pool)
 migration_manager = MigrationJobManager(settings, otp_service)
 account_service = AccountManagementService(pool, settings)
+proxy_service = ProxyService(settings)
 
 
 @asynccontextmanager
@@ -68,10 +70,22 @@ class SessionsResponse(BaseModel):
 class SingleMigrateRequest(BaseModel):
     phone: str
     password: Optional[str] = None
+    proxy: Optional[str] = None
 
 
 class BatchMigrateRequest(BaseModel):
     delay: float = 15.0
+    proxy: Optional[str] = None
+
+
+class AddProxyRequest(BaseModel):
+    name: str
+    url: str
+    is_default: bool = False
+
+
+class TestProxyRequest(BaseModel):
+    url: str
 
 
 class UpdateProfileRequest(BaseModel):
@@ -293,11 +307,17 @@ async def migrate_single(req: SingleMigrateRequest):
     if migration_manager.is_running:
         raise HTTPException(status_code=400, detail="A migration job is already running.")
 
+    effective_proxy = req.proxy or proxy_service.get_default_proxy()
     passwords = {req.phone: req.password} if req.password else {}
-    started = await migration_manager.start_batch_migration([req.phone], passwords, delay=0.0)
+    started = await migration_manager.start_batch_migration(
+        [req.phone],
+        passwords,
+        delay=0.0,
+        proxy=effective_proxy
+    )
     if not started:
         raise HTTPException(status_code=400, detail="Failed to start migration job.")
-    return {"status": "started", "phone": req.phone}
+    return {"status": "started", "phone": req.phone, "proxy_used": effective_proxy}
 
 
 @app.post("/api/migrate/batch", summary="Trigger migration for all source sessions")
@@ -311,10 +331,20 @@ async def migrate_batch(req: BatchMigrateRequest):
     if not active_phones:
         raise HTTPException(status_code=400, detail="No active authorized sessions found to migrate.")
 
-    started = await migration_manager.start_batch_migration(active_phones, delay=req.delay)
+    effective_proxy = req.proxy or proxy_service.get_default_proxy()
+    started = await migration_manager.start_batch_migration(
+        active_phones,
+        delay=req.delay,
+        proxy=effective_proxy
+    )
     if not started:
         raise HTTPException(status_code=400, detail="Failed to start migration job.")
-    return {"status": "started", "total_accounts": len(active_phones), "delay": req.delay}
+    return {
+        "status": "started",
+        "total_accounts": len(active_phones),
+        "delay": req.delay,
+        "proxy_used": effective_proxy
+    }
 
 
 @app.get("/api/migrate/status", summary="Get status of current/last migration job")
@@ -326,6 +356,38 @@ async def migrate_status():
 async def reset_migration():
     migration_manager.reset()
     return {"status": "reset"}
+
+
+# ==========================================
+# Proxy Management API
+# ==========================================
+@app.get("/api/proxies", summary="List configured proxies")
+async def list_proxies():
+    return proxy_service.get_all()
+
+
+@app.post("/api/proxies", summary="Add a new proxy")
+async def add_proxy(req: AddProxyRequest):
+    return proxy_service.add_proxy(name=req.name, url=req.url, is_default=req.is_default)
+
+
+@app.delete("/api/proxies/{proxy_id}", summary="Delete a proxy")
+async def delete_proxy(proxy_id: str):
+    if not proxy_service.delete_proxy(proxy_id):
+        raise HTTPException(status_code=404, detail="Proxy not found")
+    return {"status": "deleted", "id": proxy_id}
+
+
+@app.post("/api/proxies/{proxy_id}/default", summary="Set proxy as default")
+async def set_default_proxy(proxy_id: str):
+    if not proxy_service.set_default(proxy_id):
+        raise HTTPException(status_code=404, detail="Proxy not found")
+    return {"status": "updated", "id": proxy_id}
+
+
+@app.post("/api/proxies/test", summary="Test a proxy connection and get IP/latency")
+async def test_proxy(req: TestProxyRequest):
+    return await proxy_service.test_proxy(req.url)
 
 
 # ==========================================
