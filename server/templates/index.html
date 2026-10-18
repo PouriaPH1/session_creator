@@ -218,15 +218,15 @@
         <div class="glass rounded-2xl p-5 space-y-3">
           <h2 class="text-sm font-bold text-white flex items-center gap-2">
             <i class="ph-bold ph-upload-simple text-indigo-400"></i>
-            آپلود سشن جدید
+            آپلود سشن جدید و رمزها
           </h2>
-          <p class="text-xs text-slate-400">فایل‌های <code class="text-indigo-300 bg-indigo-500/10 px-1 py-0.5 rounded">.session</code> را بکشید یا انتخاب کنید:</p>
+          <p class="text-xs text-slate-400">فایل‌های <code class="text-indigo-300 bg-indigo-500/10 px-1 py-0.5 rounded">.session</code> یا <code class="text-indigo-300 bg-indigo-500/10 px-1 py-0.5 rounded">.csv</code> را بکشید یا انتخاب کنید:</p>
 
           <div id="drop-zone" onclick="document.getElementById('file-input').click()" class="border-2 border-dashed border-slate-700 hover:border-indigo-500/60 rounded-xl p-6 text-center cursor-pointer transition-all bg-slate-900/30">
             <i class="ph-bold ph-cloud-arrow-up text-3xl text-indigo-400 mb-2"></i>
-            <p class="text-xs font-semibold text-slate-300">کلیک برای انتخاب فایل‌های سشن</p>
-            <p class="text-[11px] text-slate-500 mt-1">پشتیبانی از چندین فایل هم‌زمان</p>
-            <input type="file" id="file-input" multiple accept=".session" class="hidden" onchange="handleFileUpload(event)">
+            <p class="text-xs font-semibold text-slate-300">کلیک برای انتخاب فایل‌های سشن یا فایل CSV</p>
+            <p class="text-[11px] text-slate-500 mt-1">پشتیبانی از چندین فایل سشن و فایل اکسل/CSV هم‌زمان</p>
+            <input type="file" id="file-input" multiple accept=".session,.csv" class="hidden" onchange="handleFileUpload(event)">
           </div>
         </div>
 
@@ -394,7 +394,11 @@
           لیست پسوردهای ۲FA ذخیره‌شده
         </h3>
         <div class="flex items-center gap-2">
-          <button onclick="downloadPasswordsCSV()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1">
+          <button onclick="document.getElementById('csv-password-input').click()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white transition flex items-center gap-1 shadow-sm">
+            <i class="ph-bold ph-upload-simple"></i> ورود CSV (ایمپورت)
+          </button>
+          <input type="file" id="csv-password-input" accept=".csv" class="hidden" onchange="handleCSVPasswordUpload(event)">
+          <button onclick="downloadPasswordsCSV()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1 shadow-sm">
             <i class="ph-bold ph-file-csv"></i> خروجی CSV (اکسل)
           </button>
           <button onclick="closePasswordsModal()" class="text-slate-400 hover:text-white transition">
@@ -838,7 +842,11 @@
         });
         const data = await res.json();
         if (res.ok) {
-          alert(`${data.uploaded_count} فایل با موفقیت آپلود و فعال شد.`);
+          let msg = `${data.uploaded_count} فایل سشن با موفقیت آپلود و فعال شد.`;
+          if (data.csv_passwords_imported > 0) {
+            msg += `\nهمچنین ${data.csv_passwords_imported} رمز عبور دو مرحله‌ای (2FA) از فایل CSV وارد شد.`;
+          }
+          alert(msg);
           await initDashboard();
         } else {
           alert("خطا در آپلود: " + data.detail);
@@ -1102,6 +1110,31 @@
 
     function downloadPasswordsCSV() {
       window.location.href = '/api/accounts/passwords/export-csv';
+    }
+
+    async function handleCSVPasswordUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const res = await fetch('/api/accounts/passwords/import-csv', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert(`${data.imported_count} رمز عبور با موفقیت از فایل CSV ثبت شد.`);
+          await openPasswordsModal();
+        } else {
+          alert("خطا در ورود فایل CSV: " + (data.detail || "مشکل نامشخص"));
+        }
+      } catch (e) {
+        alert("خطا در ارسال فایل CSV: " + e);
+      }
+      event.target.value = '';
     }
 
     // =======================================================
