@@ -608,8 +608,14 @@
         </div>
 
         <div>
-          <label class="block text-slate-300 mb-1">رمز دو مرحله‌ای (۲FA) - در صورت وجود:</label>
-          <input type="password" id="migrate-target-password" placeholder="اگر رمز ۲FA دارد وارد کنید..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500">
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-slate-300">رمز دو مرحله‌ای (۲FA):</label>
+            <span id="migrate-2fa-status-badge" class="text-[11px] text-emerald-400 font-semibold hidden items-center gap-1"></span>
+          </div>
+          <div class="relative">
+            <input type="text" id="migrate-target-password" placeholder="اگر رمز ۲FA دارد وارد کنید..." class="w-full bg-slate-900 border border-slate-700 rounded-lg pr-3 pl-8 py-2 text-white font-mono focus:outline-none focus:border-emerald-500">
+            <span class="absolute left-2.5 top-2.5 text-slate-500 text-xs font-mono"><i class="ph-bold ph-lock-key"></i></span>
+          </div>
         </div>
 
         <button onclick="confirmSingleMigrate()" class="w-full py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/30">
@@ -1810,12 +1816,52 @@
     // =======================================================
     // Single Migrate Modal Controls
     // =======================================================
-    function openSingleMigrateModal(phone) {
+    async function openSingleMigrateModal(phone) {
       document.getElementById('migrate-target-phone').value = phone;
       document.getElementById('migrate-target-phone-badge').innerText = phone;
-      document.getElementById('migrate-target-password').value = '';
       populateProxyDropdown();
+
+      const pwdInput = document.getElementById('migrate-target-password');
+      const badge = document.getElementById('migrate-2fa-status-badge');
+      pwdInput.value = '';
+      if (badge) {
+        badge.classList.add('hidden');
+        badge.classList.remove('flex');
+        badge.innerHTML = '';
+      }
+
       document.getElementById('single-migrate-modal').classList.remove('hidden');
+
+      // Auto load 2FA password in real-time from database
+      try {
+        const cleanPhone = phone.trim().replace(" ", "");
+        const res = await fetch('/api/accounts/passwords');
+        if (res.ok) {
+          const passwords = await res.json();
+          const cleanNoPlus = cleanPhone.replace(/^\+/, '');
+          const withPlus = `+${cleanNoPlus}`;
+
+          let matchedPwd = '';
+          for (const key of [cleanPhone, withPlus, cleanNoPlus]) {
+            if (passwords && passwords[key]) {
+              const item = passwords[key];
+              matchedPwd = (typeof item === 'object' && item !== null) ? (item.password || '') : item;
+              if (matchedPwd) break;
+            }
+          }
+
+          if (matchedPwd) {
+            pwdInput.value = matchedPwd;
+            if (badge) {
+              badge.classList.remove('hidden');
+              badge.classList.add('flex');
+              badge.innerHTML = `<i class="ph-bold ph-check-circle text-emerald-400"></i> خوانده‌شده از فایل رمزها`;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Could not auto-fetch 2FA password:", err);
+      }
     }
 
     function closeSingleMigrateModal() {
