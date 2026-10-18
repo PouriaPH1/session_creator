@@ -12,11 +12,15 @@ from pydantic import BaseModel
 
 from config.settings import get_settings
 from core.exceptions import OTPNotFoundError, SessionNotFoundError
+from core.telethon_patch import apply_telethon_patches
 from server.account_service import AccountManagementService
 from server.migration_manager import MigrationJobManager
 from server.otp_service import TelethonOTPService
 from server.proxy_service import ProxyService
 from server.session_pool import TelethonSessionPool
+
+# Ensure Telethon TL resilience patches are active
+apply_telethon_patches()
 
 logging.basicConfig(
     level=logging.INFO,

@@ -10,6 +10,7 @@ from .exceptions import (
     AccountBannedError,
 )
 from .interfaces import ISessionPool, IOTPService, IOTPClient
+from .telethon_patch import apply_telethon_patches
 
 __all__ = [
     "TELEGRAM_SERVICE_NOTIFICATIONS_ID",
@@ -27,4 +28,5 @@ __all__ = [
     "ISessionPool",
     "IOTPService",
     "IOTPClient",
+    "apply_telethon_patches",
 ]

@@ -6,8 +6,12 @@ from typing import Optional, Tuple
 from core.constants import TELEGRAM_SERVICE_NOTIFICATIONS_ID, CONTEXTUAL_OTP_REGEX, OTP_REGEX
 from core.exceptions import SessionNotFoundError, OTPNotFoundError
 from core.interfaces import ISessionPool, IOTPService
+from core.telethon_patch import apply_telethon_patches
 
 logger = logging.getLogger(__name__)
+
+# Ensure resilience patches are active
+apply_telethon_patches()
 
 
 class TelethonOTPService(IOTPService):
@@ -36,14 +40,33 @@ class TelethonOTPService(IOTPService):
             await client.connect()
 
         # Fetch recent messages from official Telegram notifications
+        messages = []
         try:
             messages = await client.get_messages(
                 TELEGRAM_SERVICE_NOTIFICATIONS_ID,
                 limit=5
             )
         except Exception as e:
-            logger.error(f"Error fetching messages from Telegram service for {identifier}: {e}")
-            raise OTPNotFoundError(f"Failed to access service notifications: {e}")
+            logger.warning(
+                f"Direct get_messages encountered issue for {identifier} ({e}). Attempting fallback..."
+            )
+            try:
+                async for msg in client.iter_messages(TELEGRAM_SERVICE_NOTIFICATIONS_ID, limit=5):
+                    messages.append(msg)
+            except Exception as e2:
+                logger.error(f"Iter_messages fallback also failed for {identifier}: {e2}")
+
+            if not messages:
+                # Check if the error string itself contains an OTP pattern
+                err_text = str(e)
+                code_match = CONTEXTUAL_OTP_REGEX.search(err_text)
+                if code_match:
+                    code = code_match.group(1)
+                    logger.info(f"Extracted OTP {code} from error context for {identifier}")
+                    return code, datetime.now(timezone.utc).timestamp()
+
+                logger.error(f"Error fetching messages from Telegram service for {identifier}: {e}")
+                raise OTPNotFoundError(f"Failed to access service notifications: {e}")
 
         for msg in messages:
             if not msg.message:
