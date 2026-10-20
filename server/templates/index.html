@@ -3279,6 +3279,42 @@
   </div>
   <!-- END CHAT VIEWER MODAL -->
 
+  <!-- ═══════════════════════════════════════════════════════════════
+       LIGHTBOX MODAL (Photo / Video full-screen preview)
+  ═══════════════════════════════════════════════════════════════ -->
+  <div id="cv-lightbox" class="fixed inset-0 z-[60] hidden" style="background:rgba(0,0,0,0.92)">
+    <!-- Close button -->
+    <button onclick="closeLightbox()"
+            class="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition backdrop-blur-sm">
+      <i class="ph-bold ph-x text-lg"></i>
+    </button>
+
+    <!-- Download button -->
+    <a id="cv-lightbox-dl" href="#" download
+       class="absolute top-4 left-4 z-10 flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm transition backdrop-blur-sm">
+      <i class="ph-bold ph-download-simple"></i>
+      <span>دانلود</span>
+    </a>
+
+    <!-- Spinner -->
+    <div id="cv-lightbox-spin" class="absolute inset-0 flex items-center justify-center">
+      <i class="ph-bold ph-circle-notch text-5xl text-white/60 animate-spin"></i>
+    </div>
+
+    <!-- Image -->
+    <img id="cv-lightbox-img"
+         class="hidden absolute inset-0 m-auto max-w-[95vw] max-h-[92vh] object-contain rounded-xl select-none"
+         style="cursor:zoom-out"
+         onclick="closeLightbox()" alt="">
+
+    <!-- Video -->
+    <video id="cv-lightbox-vid" controls
+           class="hidden absolute inset-0 m-auto max-w-[95vw] max-h-[92vh] rounded-xl"
+           style="background:#000">
+    </video>
+  </div>
+  <!-- END LIGHTBOX MODAL -->
+
   <script>
   // ═══════════════════════════════════════════════════════════════════
   // CHAT VIEWER — State & Constants
@@ -3562,26 +3598,102 @@
 
     let content = '';
     if (msg.media_type && msg.media_type !== 'webpage') {
-      const mediaIcons = {
-        photo: '<i class="ph-bold ph-image text-sky-400"></i> تصویر',
-        video: '<i class="ph-bold ph-video text-purple-400"></i> ویدیو',
-        audio: '<i class="ph-bold ph-music-note text-green-400"></i> صدا',
-        voice: '<i class="ph-bold ph-microphone text-emerald-400"></i> پیام صوتی',
-        sticker: '<i class="ph-bold ph-sticker text-yellow-400"></i> استیکر',
-        document: '<i class="ph-bold ph-file text-orange-400"></i> فایل',
-        other: '<i class="ph-bold ph-paperclip text-slate-400"></i> رسانه',
-      };
-      const icon = mediaIcons[msg.media_type] || mediaIcons.other;
-      // Download button — only rendered for downloadable media, triggered on click
-      const dlBtn = msg.has_media
-        ? `<button onclick="downloadChatMedia(event, ${msg.id}, '${escapeHtml(msg.media_filename || 'file')}')"
-             title="دانلود ${escapeHtml(msg.media_filename || 'فایل')}"
-             class="cv-dl-btn ml-1 px-2 py-0.5 rounded-lg bg-slate-600/60 hover:bg-slate-500/60 text-slate-200 border border-slate-500/40 transition flex items-center gap-1 text-[11px] shrink-0">
-             <i class="ph-bold ph-download-simple text-xs"></i>
-             <span class="cv-dl-label">${escapeHtml(msg.media_filename || 'دانلود')}</span>
-           </button>`
-        : '';
-      content += `<div class="flex items-center gap-2 text-xs italic text-slate-300 mb-1 flex-wrap">${icon}${dlBtn}</div>`;
+      const streamUrl = `identifier=${encodeURIComponent(CV.identifier)}&peer=${encodeURIComponent(CV.currentPeerId)}&message_id=${msg.id}`;
+      const dlUrl    = `/api/chat/download?${streamUrl}`;
+      const previewUrl = `/api/chat/stream?${streamUrl}`;
+      const fname    = escapeHtml(msg.media_filename || 'file');
+
+      if (msg.media_type === 'photo') {
+        // ── Photo: blurred thumbnail placeholder, click to open lightbox ──
+        content += `
+          <div class="cv-media-thumb relative rounded-xl overflow-hidden cursor-pointer mb-1 group"
+               style="max-width:280px;min-width:160px;"
+               onclick="openLightboxPhoto('${previewUrl}', '${fname}', ${msg.id})">
+            <div class="cv-thumb-placeholder w-full flex items-center justify-center bg-slate-700/60 rounded-xl"
+                 style="height:160px;" id="cvthumb-${msg.id}">
+              <div class="text-center text-slate-400 space-y-1">
+                <i class="ph-bold ph-image text-3xl block text-sky-400"></i>
+                <div class="text-xs">کلیک برای مشاهده عکس</div>
+              </div>
+            </div>
+            <div class="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition rounded-xl flex items-center justify-center">
+              <i class="ph-bold ph-magnifying-glass-plus text-white text-2xl opacity-0 group-hover:opacity-100 transition drop-shadow-lg"></i>
+            </div>
+          </div>
+          <a href="${dlUrl}" download="${fname}" class="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-200 transition mb-1">
+            <i class="ph-bold ph-download-simple text-xs"></i> دانلود عکس
+          </a>`;
+
+      } else if (msg.media_type === 'video') {
+        // ── Video: HTML5 player, click to load & play (no autoload) ──
+        content += `
+          <div class="cv-media-video rounded-xl overflow-hidden mb-1" style="max-width:320px;">
+            <div class="cv-video-placeholder bg-slate-700/60 rounded-xl flex items-center justify-center cursor-pointer group"
+                 style="height:180px;" id="cvvid-${msg.id}"
+                 onclick="loadVideoPlayer(${msg.id}, '${previewUrl}', '${escapeHtml(msg.media_mime || 'video/mp4')}')">
+              <div class="text-center space-y-2 pointer-events-none">
+                <div class="w-14 h-14 rounded-full bg-white/10 group-hover:bg-white/20 border-2 border-white/30 flex items-center justify-center transition mx-auto">
+                  <i class="ph-bold ph-play text-white text-2xl ml-1"></i>
+                </div>
+                <div class="text-xs text-slate-300">${fname}</div>
+              </div>
+            </div>
+          </div>
+          <a href="${dlUrl}" download="${fname}" class="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-200 transition mb-1">
+            <i class="ph-bold ph-download-simple text-xs"></i> دانلود ویدیو
+          </a>`;
+
+      } else if (msg.media_type === 'audio' || msg.media_type === 'voice') {
+        // ── Audio/Voice: inline HTML5 audio player ──
+        const audioIcon = msg.media_type === 'voice'
+          ? '<i class="ph-bold ph-microphone text-emerald-400 text-xl"></i>'
+          : '<i class="ph-bold ph-music-note text-green-400 text-xl"></i>';
+        const audioLabel = msg.media_type === 'voice' ? 'پیام صوتی' : (fname || 'فایل صوتی');
+        content += `
+          <div class="cv-media-audio flex items-center gap-3 bg-slate-700/50 rounded-2xl px-3 py-2.5 mb-1" style="max-width:280px;">
+            ${audioIcon}
+            <div class="flex-1 min-w-0 space-y-1">
+              <div class="text-xs text-slate-300 truncate" style="direction:rtl">${escapeHtml(audioLabel)}</div>
+              <div id="cvaudio-${msg.id}">
+                <button onclick="loadAudioPlayer(${msg.id}, '${previewUrl}', '${escapeHtml(msg.media_mime || 'audio/mpeg')}')"
+                        class="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 transition">
+                  <i class="ph-bold ph-play-circle text-base"></i> پخش
+                </button>
+              </div>
+            </div>
+            <a href="${dlUrl}" download="${fname}" title="دانلود"
+               class="text-slate-400 hover:text-slate-200 transition p-1 shrink-0">
+              <i class="ph-bold ph-download-simple text-sm"></i>
+            </a>
+          </div>`;
+
+      } else if (msg.media_type === 'sticker') {
+        content += `<div class="text-2xl mb-1 flex items-center gap-1 text-slate-400 text-xs italic">
+          <i class="ph-bold ph-sticker text-yellow-400 text-lg"></i> استیکر
+        </div>`;
+
+      } else if (msg.has_media) {
+        // ── Document / other downloadable file ──
+        const extIcon = cvFileIcon(msg.media_filename || '');
+        content += `
+          <div class="cv-media-doc flex items-center gap-3 bg-slate-700/50 rounded-2xl px-3 py-2.5 mb-1" style="max-width:280px;">
+            <div class="w-10 h-10 rounded-xl bg-slate-600/60 flex items-center justify-center shrink-0 text-lg">${extIcon}</div>
+            <div class="flex-1 min-w-0">
+              <div class="text-xs font-semibold text-slate-200 truncate" style="direction:rtl">${fname}</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">${escapeHtml(msg.media_mime || 'فایل')}</div>
+            </div>
+            <a href="${dlUrl}" download="${fname}"
+               class="px-2.5 py-1.5 rounded-xl bg-cyan-600/30 hover:bg-cyan-600/40 text-cyan-300 border border-cyan-500/30 transition text-[11px] flex items-center gap-1 shrink-0">
+              <i class="ph-bold ph-download-simple text-xs"></i> دانلود
+            </a>
+          </div>`;
+
+      } else {
+        // media with no download (webpage, etc.)
+        content += `<div class="text-xs text-slate-400 italic mb-1 flex items-center gap-1">
+          <i class="ph-bold ph-paperclip text-slate-500"></i> رسانه
+        </div>`;
+      }
     }
 
     if (msg.reply_to_id) {
@@ -3684,51 +3796,153 @@
     }
   }
 
-  // ── Download Media ───────────────────────────────────────────────
+  // ── Media Helpers ────────────────────────────────────────────────
+  function cvStreamUrl(msgId) {
+    return `/api/chat/stream?identifier=${encodeURIComponent(CV.identifier)}&peer=${encodeURIComponent(CV.currentPeerId)}&message_id=${msgId}`;
+  }
+
+  function cvFileIcon(filename) {
+    const ext = (filename.split('.').pop() || '').toLowerCase();
+    const map = {
+      pdf: '<i class="ph-bold ph-file-pdf text-rose-400"></i>',
+      zip: '<i class="ph-bold ph-file-zip text-amber-400"></i>',
+      rar: '<i class="ph-bold ph-file-zip text-amber-400"></i>',
+      mp3: '<i class="ph-bold ph-file-audio text-green-400"></i>',
+      mp4: '<i class="ph-bold ph-file-video text-purple-400"></i>',
+      jpg: '<i class="ph-bold ph-file-image text-sky-400"></i>',
+      jpeg: '<i class="ph-bold ph-file-image text-sky-400"></i>',
+      png: '<i class="ph-bold ph-file-image text-sky-400"></i>',
+      doc: '<i class="ph-bold ph-file-doc text-blue-400"></i>',
+      docx: '<i class="ph-bold ph-file-doc text-blue-400"></i>',
+      xls: '<i class="ph-bold ph-file-xls text-emerald-400"></i>',
+      xlsx: '<i class="ph-bold ph-file-xls text-emerald-400"></i>',
+      txt: '<i class="ph-bold ph-file-text text-slate-300"></i>',
+    };
+    return map[ext] || '<i class="ph-bold ph-file text-orange-400"></i>';
+  }
+
+  // ── Photo Lightbox ────────────────────────────────────────────────
+  function openLightboxPhoto(previewUrl, filename, msgId) {
+    const lb = cvEl('cv-lightbox');
+    const img = cvEl('cv-lightbox-img');
+    const vid = cvEl('cv-lightbox-vid');
+    const spin = cvEl('cv-lightbox-spin');
+    const dlBtn = cvEl('cv-lightbox-dl');
+
+    // Reset
+    img.classList.add('hidden'); img.src = '';
+    vid.classList.add('hidden'); vid.src = ''; vid.pause && vid.pause();
+    spin.classList.remove('hidden');
+    dlBtn.href = previewUrl.replace('/api/chat/stream', '/api/chat/download');
+    dlBtn.download = filename;
+
+    lb.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+
+    const fullUrl = previewUrl;
+    img.onload = () => { spin.classList.add('hidden'); img.classList.remove('hidden'); };
+    img.onerror = () => { spin.innerHTML = '<div class="text-rose-400 text-sm">خطا در بارگذاری</div>'; };
+    img.src = fullUrl;
+  }
+
+  function openLightboxVideo(previewUrl, filename, mime) {
+    const lb = cvEl('cv-lightbox');
+    const img = cvEl('cv-lightbox-img');
+    const vid = cvEl('cv-lightbox-vid');
+    const spin = cvEl('cv-lightbox-spin');
+    const dlBtn = cvEl('cv-lightbox-dl');
+
+    img.classList.add('hidden'); img.src = '';
+    spin.classList.remove('hidden');
+    vid.classList.add('hidden');
+    dlBtn.href = previewUrl.replace('/api/chat/stream', '/api/chat/download');
+    dlBtn.download = filename;
+
+    lb.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+
+    vid.src = previewUrl;
+    vid.type = mime || 'video/mp4';
+    vid.oncanplay = () => { spin.classList.add('hidden'); vid.classList.remove('hidden'); };
+    vid.onerror = () => { spin.innerHTML = '<div class="text-rose-400 text-sm">خطا در پخش ویدیو</div>'; };
+    vid.load();
+    vid.play().catch(() => {});
+  }
+
+  function closeLightbox() {
+    const lb = cvEl('cv-lightbox');
+    lb.classList.add('hidden');
+    const vid = cvEl('cv-lightbox-vid');
+    vid.pause(); vid.src = '';
+    cvEl('cv-lightbox-img').src = '';
+    if (!cvEl('chat-viewer-modal').classList.contains('hidden')) {
+      document.body.style.overflow = 'hidden'; // keep body locked for chat modal
+    } else {
+      document.body.style.overflow = '';
+    }
+  }
+
+  // ── Video player inline (lazy-load on click) ─────────────────────
+  function loadVideoPlayer(msgId, previewUrl, mime) {
+    const placeholder = cvEl(`cvvid-${msgId}`);
+    if (!placeholder) return;
+    const dlUrl = previewUrl.replace('/api/chat/stream', '/api/chat/download');
+    const filename = previewUrl.split('message_id=')[1] || 'video';
+    placeholder.outerHTML = `
+      <div class="rounded-xl overflow-hidden" style="max-width:320px;">
+        <video controls preload="metadata" style="width:100%;max-height:240px;background:#000;border-radius:12px;"
+               onclick="event.stopPropagation()">
+          <source src="${previewUrl}" type="${escapeHtml(mime)}">
+          مرورگر شما ویدیو را پشتیبانی نمی‌کند.
+        </video>
+        <div class="flex justify-between items-center mt-1 px-1">
+          <button onclick="openLightboxVideo('${previewUrl}', '', '${escapeHtml(mime)}')"
+                  class="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 transition">
+            <i class="ph-bold ph-arrows-out text-xs"></i> تمام‌صفحه
+          </button>
+          <a href="${dlUrl}" download class="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 transition">
+            <i class="ph-bold ph-download-simple text-xs"></i> دانلود
+          </a>
+        </div>
+      </div>`;
+  }
+
+  // ── Audio player inline (lazy-load on click) ─────────────────────
+  function loadAudioPlayer(msgId, previewUrl, mime) {
+    const container = cvEl(`cvaudio-${msgId}`);
+    if (!container) return;
+    container.innerHTML = `
+      <audio controls preload="none" style="width:100%;height:28px;accent-color:#22d3ee;">
+        <source src="${previewUrl}" type="${escapeHtml(mime)}">
+      </audio>`;
+    container.querySelector('audio').play().catch(() => {});
+  }
+
+  // ── Download (kept for backward compat / doc downloads) ──────────
   async function downloadChatMedia(event, messageId, filename) {
     const btn = event.currentTarget;
     const label = btn.querySelector('.cv-dl-label');
     const icon = btn.querySelector('i');
-
-    // Visual feedback
     btn.disabled = true;
-    icon.className = 'ph-bold ph-circle-notch animate-spin text-xs';
+    if (icon) icon.className = 'ph-bold ph-circle-notch animate-spin text-xs';
     if (label) label.textContent = 'در حال دانلود...';
-
     try {
       const url = `/api/chat/download?identifier=${encodeURIComponent(CV.identifier)}&peer=${encodeURIComponent(CV.currentPeerId)}&message_id=${messageId}`;
       const res = await fetch(url);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }));
-        throw new Error(err.detail || 'خطا در دانلود');
-      }
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'خطا'); }
       const blob = await res.blob();
-      // Trigger browser download without opening a new tab
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = filename || 'file';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-
-      // Success state
-      icon.className = 'ph-bold ph-check text-xs text-emerald-400';
+      if (icon) icon.className = 'ph-bold ph-check text-xs text-emerald-400';
       if (label) label.textContent = 'دانلود شد';
-      setTimeout(() => {
-        icon.className = 'ph-bold ph-download-simple text-xs';
-        if (label) label.textContent = filename || 'دانلود';
-        btn.disabled = false;
-      }, 3000);
+      setTimeout(() => { if(icon) icon.className='ph-bold ph-download-simple text-xs'; if(label) label.textContent=filename||'دانلود'; btn.disabled=false; }, 3000);
     } catch (e) {
-      icon.className = 'ph-bold ph-warning text-xs text-rose-400';
+      if (icon) icon.className = 'ph-bold ph-warning text-xs text-rose-400';
       if (label) label.textContent = 'خطا';
-      btn.title = e.message;
-      setTimeout(() => {
-        icon.className = 'ph-bold ph-download-simple text-xs';
-        if (label) label.textContent = filename || 'دانلود';
-        btn.disabled = false;
-      }, 3000);
+      setTimeout(() => { if(icon) icon.className='ph-bold ph-download-simple text-xs'; if(label) label.textContent=filename||'دانلود'; btn.disabled=false; }, 3000);
     }
   }
 
@@ -3818,10 +4032,20 @@
     if (e.target === this) closeChatViewer();
   });
 
+  // Close lightbox on backdrop click
+  cvEl('cv-lightbox').addEventListener('click', function(e) {
+    if (e.target === this) closeLightbox();
+  });
+
   // Close on Escape
   document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && !cvEl('chat-viewer-modal').classList.contains('hidden')) {
-      closeChatViewer();
+    if (e.key === 'Escape') {
+      // Close lightbox first if open, then chat modal
+      if (!cvEl('cv-lightbox').classList.contains('hidden')) {
+        closeLightbox();
+      } else if (!cvEl('chat-viewer-modal').classList.contains('hidden')) {
+        closeChatViewer();
+      }
     }
   });
   </script>
