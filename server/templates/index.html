@@ -1953,6 +1953,56 @@
       }
     }
 
+    function close2FAModal() {
+      document.getElementById('twofa-modal').classList.add('hidden');
+    }
+
+    function generateRandomPassForInput() {
+      const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+      let pass = "";
+      for (let i = 0; i < 12; i++) {
+        pass += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      document.getElementById('twofa-new-password').value = pass;
+    }
+
+    async function save2FA() {
+      const identifier = document.getElementById('twofa-identifier').value;
+      const newPassword = document.getElementById('twofa-new-password').value;
+      const currentPassword = document.getElementById('twofa-current-password').value;
+      const hint = document.getElementById('twofa-hint').value;
+
+      if (!newPassword || newPassword.length < 6) {
+        alert("رمز عبور باید حداقل ۶ کاراکتر باشد.");
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/accounts/2fa', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            identifier: identifier,
+            new_password: newPassword,
+            current_password: currentPassword || null,
+            hint: hint
+          })
+        });
+
+        if (res.ok) {
+          alert(`رمز دو مرحله‌ای برای ${identifier} با موفقیت ثبت شد!
+رمز: ${newPassword}`);
+          close2FAModal();
+          loadSourceSessions();
+        } else {
+          const err = await res.json();
+          alert("خطا در ثبت رمز ۲FA: " + err.detail);
+        }
+      } catch (e) {
+        alert("خطا: " + e);
+      }
+    }
+
     async function saveStoredPasswordOnly() {
       const identifier = document.getElementById('twofa-identifier').value.trim();
       const password = document.getElementById('twofa-storage-password').value.trim();
