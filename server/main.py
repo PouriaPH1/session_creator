@@ -1141,6 +1141,29 @@ async def chat_send(req: SendMessageRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/chat/download", summary="Download media from a specific message")
+async def chat_download_media(
+    identifier: str = Query(..., description="Phone or session name"),
+    peer: str = Query(..., description="Peer ID or username"),
+    message_id: int = Query(..., description="Message ID containing the media"),
+):
+    try:
+        data, filename, mime = await chat_service.download_media(identifier, peer, message_id)
+        safe_filename = urllib.parse.quote(filename)
+        return Response(
+            content=data,
+            media_type=mime,
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{safe_filename}",
+                "Content-Length": str(len(data)),
+            }
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.websocket("/ws/chat/{identifier}/{peer_id}")
 async def chat_websocket(
     websocket: WebSocket,
