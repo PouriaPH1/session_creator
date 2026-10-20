@@ -3572,7 +3572,16 @@
         other: '<i class="ph-bold ph-paperclip text-slate-400"></i> رسانه',
       };
       const icon = mediaIcons[msg.media_type] || mediaIcons.other;
-      content += `<div class="flex items-center gap-1.5 text-xs italic text-slate-300 mb-0.5">${icon}</div>`;
+      // Download button — only rendered for downloadable media, triggered on click
+      const dlBtn = msg.has_media
+        ? `<button onclick="downloadChatMedia(event, ${msg.id}, '${escapeHtml(msg.media_filename || 'file')}')"
+             title="دانلود ${escapeHtml(msg.media_filename || 'فایل')}"
+             class="cv-dl-btn ml-1 px-2 py-0.5 rounded-lg bg-slate-600/60 hover:bg-slate-500/60 text-slate-200 border border-slate-500/40 transition flex items-center gap-1 text-[11px] shrink-0">
+             <i class="ph-bold ph-download-simple text-xs"></i>
+             <span class="cv-dl-label">${escapeHtml(msg.media_filename || 'دانلود')}</span>
+           </button>`
+        : '';
+      content += `<div class="flex items-center gap-2 text-xs italic text-slate-300 mb-1 flex-wrap">${icon}${dlBtn}</div>`;
     }
 
     if (msg.reply_to_id) {
@@ -3672,6 +3681,54 @@
       CV.pendingSend = false;
       btn.innerHTML = '<i class="ph-bold ph-paper-plane-tilt text-base" style="transform:rotate(-45deg)"></i>';
       btn.disabled = false;
+    }
+  }
+
+  // ── Download Media ───────────────────────────────────────────────
+  async function downloadChatMedia(event, messageId, filename) {
+    const btn = event.currentTarget;
+    const label = btn.querySelector('.cv-dl-label');
+    const icon = btn.querySelector('i');
+
+    // Visual feedback
+    btn.disabled = true;
+    icon.className = 'ph-bold ph-circle-notch animate-spin text-xs';
+    if (label) label.textContent = 'در حال دانلود...';
+
+    try {
+      const url = `/api/chat/download?identifier=${encodeURIComponent(CV.identifier)}&peer=${encodeURIComponent(CV.currentPeerId)}&message_id=${messageId}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'خطای ناشناخته' }));
+        throw new Error(err.detail || 'خطا در دانلود');
+      }
+      const blob = await res.blob();
+      // Trigger browser download without opening a new tab
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename || 'file';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+
+      // Success state
+      icon.className = 'ph-bold ph-check text-xs text-emerald-400';
+      if (label) label.textContent = 'دانلود شد';
+      setTimeout(() => {
+        icon.className = 'ph-bold ph-download-simple text-xs';
+        if (label) label.textContent = filename || 'دانلود';
+        btn.disabled = false;
+      }, 3000);
+    } catch (e) {
+      icon.className = 'ph-bold ph-warning text-xs text-rose-400';
+      if (label) label.textContent = 'خطا';
+      btn.title = e.message;
+      setTimeout(() => {
+        icon.className = 'ph-bold ph-download-simple text-xs';
+        if (label) label.textContent = filename || 'دانلود';
+        btn.disabled = false;
+      }, 3000);
     }
   }
 
