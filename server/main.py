@@ -9,7 +9,7 @@ from typing import List, Optional
 import urllib.parse
 import zipfile
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, Response, UploadFile, status
+from fastapi import FastAPI, File, Form, HTTPException, Query, Response, UploadFile, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
@@ -17,6 +17,7 @@ from config.settings import get_settings
 from core.exceptions import OTPNotFoundError, SessionNotFoundError
 from core.telethon_patch import apply_telethon_patches
 from server.account_service import AccountManagementService
+from server.chat_service import ChatService
 from server.metadata_service import MetadataService
 from server.migration_manager import MigrationJobManager
 from server.otp_service import TelethonOTPService
@@ -39,6 +40,7 @@ otp_service = TelethonOTPService(pool)
 migration_manager = MigrationJobManager(settings, otp_service, metadata_service)
 account_service = AccountManagementService(pool, settings)
 proxy_service = ProxyService(settings)
+chat_service = ChatService(pool)
 
 
 @asynccontextmanager
@@ -1068,3 +1070,135 @@ async def check_spambot(req: AccountActionRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ==========================================
+# Chat Viewer API
+# ==========================================
+
+class SendMessageRequest(BaseModel):
+    identifier: str
+    peer: str
+    text: str
+
+
+@app.get("/api/chat/dialogs", summary="List dialogs (chats, groups, channels) for a session")
+async def chat_dialogs(
+    identifier: str = Query(..., description="Phone or session name"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    try:
+        dialogs = await chat_service.get_dialogs(identifier, limit=limit, offset=offset)
+        return {"dialogs": dialogs, "count": len(dialogs)}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/chat/messages", summary="Get message history for a peer")
+async def chat_messages(
+    identifier: str = Query(..., description="Phone or session name"),
+    peer: str = Query(..., description="User ID, username, phone, or chat/channel ID"),
+    limit: int = Query(50, ge=1, le=100),
+    offset_id: int = Query(0, ge=0, description="Load messages older than this message ID"),
+):
+    try:
+        messages, me_id = await chat_service.get_messages(
+            identifier, peer, limit=limit, offset_id=offset_id
+        )
+        return {"messages": messages, "me_id": me_id}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/chat/peer-info", summary="Get info about a specific peer (user/group/channel)")
+async def chat_peer_info(
+    identifier: str = Query(...),
+    peer: str = Query(...),
+):
+    try:
+        info = await chat_service.get_peer_info(identifier, peer)
+        return info
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chat/send", summary="Send a message to a peer")
+async def chat_send(req: SendMessageRequest):
+    try:
+        sent = await chat_service.send_message(req.identifier, req.peer, req.text)
+        return {"status": "sent", "message": sent}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.websocket("/ws/chat/{identifier}/{peer_id}")
+async def chat_websocket(
+    websocket: WebSocket,
+    identifier: str,
+    peer_id: str,
+):
+    """
+    WebSocket endpoint for real-time message streaming.
+    - identifier: phone or session name
+    - peer_id: numeric peer ID (user_id / chat_id / channel_id)
+
+    The client sends JSON pings: {"type": "ping"}
+    The server pushes new messages as JSON: {"type": "new_message", "message": {...}}
+    """
+    await websocket.accept()
+    logger.info(f"[WS] Chat opened: identifier={identifier} peer={peer_id}")
+
+    queue: asyncio.Queue = chat_service.register_listener(identifier, peer_id)
+
+    try:
+        while True:
+            # Wait for either a new message from Telegram OR a client message (ping/close)
+            receive_task = asyncio.create_task(websocket.receive_text())
+            queue_task = asyncio.create_task(queue.get())
+
+            done, pending = await asyncio.wait(
+                [receive_task, queue_task],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            # Cancel whichever didn't fire
+            for t in pending:
+                t.cancel()
+                try:
+                    await t
+                except (asyncio.CancelledError, Exception):
+                    pass
+
+            for t in done:
+                if t is receive_task:
+                    try:
+                        data = t.result()
+                        payload = json.loads(data)
+                        if payload.get("type") == "ping":
+                            await websocket.send_json({"type": "pong"})
+                    except (json.JSONDecodeError, WebSocketDisconnect):
+                        return
+                elif t is queue_task:
+                    msg = t.result()
+                    await websocket.send_json({"type": "new_message", "message": msg})
+
+    except WebSocketDisconnect:
+        logger.info(f"[WS] Chat closed: identifier={identifier} peer={peer_id}")
+    except Exception as e:
+        logger.error(f"[WS] Chat error: {e}")
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+    finally:
+        chat_service.unregister_listener(identifier, peer_id)
