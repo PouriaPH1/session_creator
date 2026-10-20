@@ -1164,6 +1164,78 @@ async def chat_download_media(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+from fastapi import Request as FastAPIRequest
+
+@app.get("/api/chat/stream", summary="Stream media with Range request support (for inline preview)")
+async def chat_stream_media(
+    request: FastAPIRequest,
+    identifier: str = Query(...),
+    peer: str = Query(...),
+    message_id: int = Query(...),
+):
+    """
+    Supports HTTP Range requests so browsers can:
+    - Seek video without downloading the full file
+    - Show inline photo/audio previews
+
+    Returns 206 Partial Content for range requests, 200 for full requests.
+    Sets Content-Disposition: inline so the browser displays rather than downloads.
+    """
+    try:
+        range_header = request.headers.get("range", "")
+
+        # Parse Range header  e.g. "bytes=0-1023"
+        start = 0
+        end: Optional[int] = None
+        if range_header and range_header.lower().startswith("bytes="):
+            parts = range_header[6:].split("-")
+            try:
+                start = int(parts[0]) if parts[0] else 0
+                end = int(parts[1]) if len(parts) > 1 and parts[1] else None
+            except ValueError:
+                start = 0
+                end = None
+
+        chunk, total_size, filename, mime = await chat_service.stream_media_range(
+            identifier, peer, message_id, start=start, end=end
+        )
+
+        safe_filename = urllib.parse.quote(filename)
+        actual_end = start + len(chunk) - 1
+
+        if range_header:
+            return Response(
+                content=chunk,
+                status_code=206,
+                media_type=mime,
+                headers={
+                    "Content-Range": f"bytes {start}-{actual_end}/{total_size}",
+                    "Content-Length": str(len(chunk)),
+                    "Accept-Ranges": "bytes",
+                    "Content-Disposition": f"inline; filename*=UTF-8''{safe_filename}",
+                    "Cache-Control": "no-store",
+                },
+            )
+        else:
+            return Response(
+                content=chunk,
+                status_code=200,
+                media_type=mime,
+                headers={
+                    "Content-Length": str(total_size),
+                    "Accept-Ranges": "bytes",
+                    "Content-Disposition": f"inline; filename*=UTF-8''{safe_filename}",
+                    "Cache-Control": "no-store",
+                },
+            )
+
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"[stream] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.websocket("/ws/chat/{identifier}/{peer_id}")
 async def chat_websocket(
     websocket: WebSocket,
