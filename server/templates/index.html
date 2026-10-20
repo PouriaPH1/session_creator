@@ -1343,6 +1343,9 @@
                 <button onclick="migrateSingle('${item.phone}')" title="${isHealthy ? 'ساخت سشن با آی‌پی جدید' : 'این سشن مشکل‌دار است و امکان ساخت سشن ندارد'}" ${disabledAttr} class="px-2 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition flex items-center gap-1 ${disabledClass}">
                   <i class="ph-bold ph-lightning"></i> ساخت
                 </button>
+                <button onclick="openChatViewer('${escapeHtml(item.phone || item.session_name)}', '${escapeHtml(item.first_name || item.phone || '')}', '${escapeHtml(item.phone || '')}' )" title="${isHealthy ? 'مشاهده و ارسال پیام‌های اکانت' : 'غیرقابل استفاده'}" ${disabledAttr} class="px-2 py-1 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 transition flex items-center gap-1 ${disabledClass}">
+                  <i class="ph-bold ph-chats"></i> چت
+                </button>
                 <button onclick="deleteSourceSession('${item.session_name}')" title="حذف این سشن از پنل" class="p-1 rounded-lg bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 border border-rose-500/20 transition">
                   <i class="ph-bold ph-trash"></i>
                 </button>
@@ -3119,6 +3122,651 @@
 
     // Initialize on load
     window.addEventListener('DOMContentLoaded', initDashboard);
+  </script>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       CHAT VIEWER MODAL
+  ═══════════════════════════════════════════════════════════════ -->
+  <div id="chat-viewer-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden" style="direction:ltr">
+    <div class="flex h-full w-full items-center justify-center p-3 sm:p-4">
+      <div class="w-full max-w-5xl h-[90vh] flex flex-col rounded-2xl overflow-hidden border border-slate-700/60 shadow-2xl shadow-black/50" style="background:#17212b">
+
+        <!-- ── Header Bar ── -->
+        <div class="flex items-center justify-between px-4 py-3 border-b border-slate-700/50 shrink-0" style="background:#17212b">
+          <div class="flex items-center gap-3">
+            <!-- Account Badge -->
+            <div class="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-700/40 border border-slate-600/40">
+              <i class="ph-bold ph-user-circle text-cyan-400 text-base"></i>
+              <div style="direction:rtl">
+                <div id="cv-account-name" class="text-xs font-bold text-white leading-none"></div>
+                <div id="cv-account-phone" class="text-[10px] text-slate-400 font-mono mt-0.5"></div>
+              </div>
+            </div>
+            <!-- Current Peer Info -->
+            <div id="cv-peer-header" class="hidden items-center gap-2">
+              <div class="w-px h-6 bg-slate-600"></div>
+              <div id="cv-peer-avatar-header" class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"></div>
+              <div>
+                <div id="cv-peer-name-header" class="text-sm font-bold text-white leading-none"></div>
+                <div id="cv-peer-type-header" class="text-[10px] text-slate-400 mt-0.5"></div>
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <div id="cv-ws-indicator" class="flex items-center gap-1.5 text-[11px] text-slate-400">
+              <span class="w-2 h-2 rounded-full bg-slate-600" id="cv-ws-dot"></span>
+              <span id="cv-ws-label">آفلاین</span>
+            </div>
+            <button onclick="closeChatViewer()" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition">
+              <i class="ph-bold ph-x text-lg"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- ── Body: Sidebar + Chat Area ── -->
+        <div class="flex flex-1 min-h-0">
+
+          <!-- ── Sidebar: Dialog List ── -->
+          <div class="w-72 shrink-0 flex flex-col border-r border-slate-700/40" style="background:#17212b">
+            <!-- Search + New Chat -->
+            <div class="p-3 border-b border-slate-700/40 space-y-2">
+              <div class="flex items-center gap-1.5">
+                <div class="flex-1 relative">
+                  <i class="ph-bold ph-magnifying-glass absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm pointer-events-none"></i>
+                  <input id="cv-dialog-search" type="text" placeholder="جستجوی چت‌ها..." oninput="filterDialogs()"
+                    class="w-full bg-slate-700/50 border border-slate-600/40 rounded-xl pr-8 pl-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/60"
+                    style="direction:rtl">
+                </div>
+              </div>
+              <!-- Open Peer Input -->
+              <div class="flex items-center gap-1.5">
+                <input id="cv-peer-input" type="text" placeholder="ID، یوزرنیم یا شماره..." oninput="" onkeydown="if(event.key==='Enter')openPeerFromInput()"
+                  class="flex-1 bg-slate-700/50 border border-slate-600/40 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/60"
+                  style="direction:rtl">
+                <button onclick="openPeerFromInput()" class="px-3 py-2 rounded-xl bg-cyan-600/30 hover:bg-cyan-600/40 text-cyan-300 border border-cyan-500/40 transition text-xs font-bold">
+                  باز
+                </button>
+              </div>
+            </div>
+
+            <!-- Dialogs Loader -->
+            <div id="cv-dialogs-loading" class="flex-1 flex items-center justify-center text-slate-500 text-sm">
+              <div class="text-center space-y-2">
+                <i class="ph-bold ph-circle-notch text-2xl animate-spin text-cyan-500 block"></i>
+                <div>در حال بارگذاری چت‌ها...</div>
+              </div>
+            </div>
+
+            <!-- Dialog List -->
+            <div id="cv-dialog-list" class="flex-1 overflow-y-auto hidden" style="scrollbar-width:thin;scrollbar-color:#334155 transparent"></div>
+
+            <!-- Load More -->
+            <div class="p-2 border-t border-slate-700/40 hidden" id="cv-load-more-bar">
+              <button onclick="loadMoreDialogs()" class="w-full py-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-700/40 transition flex items-center justify-center gap-1.5">
+                <i class="ph-bold ph-arrow-down"></i> بارگذاری بیشتر
+              </button>
+            </div>
+          </div>
+
+          <!-- ── Chat Area ── -->
+          <div class="flex-1 flex flex-col min-w-0" style="background:#0e1621">
+
+            <!-- Empty State -->
+            <div id="cv-empty-state" class="flex-1 flex items-center justify-center">
+              <div class="text-center space-y-3 text-slate-600 p-8" style="direction:rtl">
+                <i class="ph-bold ph-chats text-6xl text-slate-700 block"></i>
+                <p class="text-lg font-bold text-slate-500">یک چت انتخاب کنید</p>
+                <p class="text-sm">از لیست سمت چپ یک مکالمه را انتخاب کنید<br>یا ID / یوزرنیم مخاطب را وارد کنید.</p>
+              </div>
+            </div>
+
+            <!-- Chat Window (hidden until peer selected) -->
+            <div id="cv-chat-window" class="flex-1 flex flex-col min-h-0 hidden">
+
+              <!-- Peer top bar -->
+              <div class="flex items-center justify-between px-4 py-2.5 border-b border-slate-700/40 shrink-0" style="background:#17212b">
+                <div class="flex items-center gap-3">
+                  <div id="cv-chat-peer-avatar" class="w-9 h-9 rounded-full flex items-center justify-center text-base font-bold text-white shrink-0"></div>
+                  <div>
+                    <div id="cv-chat-peer-name" class="text-sm font-bold text-white" style="direction:rtl"></div>
+                    <div id="cv-chat-peer-sub" class="text-[11px] text-slate-400" style="direction:rtl"></div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <button onclick="refreshMessages()" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/40 transition" title="بازخوانی">
+                    <i class="ph-bold ph-arrows-clockwise text-base"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Messages area -->
+              <div id="cv-messages" class="flex-1 overflow-y-auto p-4 space-y-1" style="scrollbar-width:thin;scrollbar-color:#1e2d3d transparent">
+                <!-- Messages injected by JS -->
+              </div>
+
+              <!-- Load older messages button -->
+              <div id="cv-load-older-bar" class="flex justify-center py-2 hidden">
+                <button onclick="loadOlderMessages()" class="px-4 py-1.5 rounded-full text-xs text-slate-400 hover:text-white bg-slate-700/40 hover:bg-slate-700/60 border border-slate-600/40 transition flex items-center gap-1.5">
+                  <i class="ph-bold ph-arrow-up"></i> پیام‌های قدیمی‌تر
+                </button>
+              </div>
+
+              <!-- Send bar -->
+              <div class="p-3 border-t border-slate-700/40 shrink-0" style="background:#17212b">
+                <div id="cv-cant-write-notice" class="hidden text-center text-xs text-slate-500 py-1 mb-2" style="direction:rtl">
+                  <i class="ph-bold ph-lock-simple"></i> ارسال پیام در این چت مجاز نیست (کانال یا محدودیت)
+                </div>
+                <div class="flex items-end gap-2" id="cv-send-area">
+                  <textarea id="cv-message-input"
+                    placeholder="پیام خود را بنویسید..."
+                    rows="1"
+                    onkeydown="handleChatKeyDown(event)"
+                    oninput="autoResizeTextarea(this)"
+                    class="flex-1 bg-slate-700/50 border border-slate-600/40 rounded-2xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/60 resize-none max-h-32 leading-relaxed"
+                    style="direction:rtl;min-height:40px"></textarea>
+                  <button id="cv-send-btn" onclick="sendChatMessage()"
+                    class="w-10 h-10 rounded-full bg-cyan-500 hover:bg-cyan-400 active:scale-95 text-white flex items-center justify-center shrink-0 transition-all shadow-lg shadow-cyan-500/30">
+                    <i class="ph-bold ph-paper-plane-tilt text-base" style="transform:rotate(-45deg)"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <!-- END CHAT VIEWER MODAL -->
+
+  <script>
+  // ═══════════════════════════════════════════════════════════════════
+  // CHAT VIEWER — State & Constants
+  // ═══════════════════════════════════════════════════════════════════
+  const CV = {
+    identifier: null,       // session phone / name
+    accountName: '',
+    accountPhone: '',
+    currentPeerId: null,    // numeric peer id string
+    currentPeerName: '',
+    currentPeerType: '',    // user | group | channel
+    dialogs: [],            // full list loaded from API
+    filteredDialogs: [],    // after search filter
+    dialogOffset: 0,
+    messagesOldestId: null, // for "load older" pagination
+    ws: null,
+    wsReconnectTimer: null,
+    pendingSend: false,
+    canWrite: true,
+  };
+
+  // ── Helpers ──────────────────────────────────────────────────────
+  function cvEl(id) { return document.getElementById(id); }
+
+  function cvFmt(isoDate) {
+    if (!isoDate) return '';
+    const d = new Date(isoDate);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    if (isToday) {
+      return d.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+    }
+    return d.toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' });
+  }
+
+  function cvFmtTime(isoDate) {
+    if (!isoDate) return '';
+    return new Date(isoDate).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function cvTypeIcon(type) {
+    if (type === 'channel') return '<i class="ph-bold ph-megaphone text-xs"></i>';
+    if (type === 'group') return '<i class="ph-bold ph-users-three text-xs"></i>';
+    if (type === 'bot') return '<i class="ph-bold ph-robot text-xs"></i>';
+    return '';
+  }
+
+  function cvTypeLabel(type) {
+    if (type === 'channel') return 'کانال';
+    if (type === 'group') return 'گروه';
+    if (type === 'bot') return 'ربات';
+    return 'پیام خصوصی';
+  }
+
+  function cvAvatarHtml(letter, colorClass, size = 'w-10 h-10', textSize = 'text-base') {
+    return `<div class="${size} ${colorClass} rounded-full flex items-center justify-center ${textSize} font-bold text-white shrink-0">${letter}</div>`;
+  }
+
+  function autoResizeTextarea(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 128) + 'px';
+  }
+
+  // ── Open / Close ─────────────────────────────────────────────────
+  function openChatViewer(identifier, firstName, phone) {
+    CV.identifier = identifier;
+    CV.accountName = firstName || identifier;
+    CV.accountPhone = phone || identifier;
+    CV.currentPeerId = null;
+    CV.dialogs = [];
+    CV.filteredDialogs = [];
+    CV.dialogOffset = 0;
+    CV.messagesOldestId = null;
+
+    // Reset UI
+    cvEl('cv-account-name').textContent = CV.accountName;
+    cvEl('cv-account-phone').textContent = CV.accountPhone;
+    cvEl('cv-peer-header').classList.add('hidden');
+    cvEl('cv-peer-header').classList.remove('flex');
+    cvEl('cv-dialogs-loading').classList.remove('hidden');
+    cvEl('cv-dialog-list').classList.add('hidden');
+    cvEl('cv-dialog-list').innerHTML = '';
+    cvEl('cv-load-more-bar').classList.add('hidden');
+    cvEl('cv-empty-state').classList.remove('hidden');
+    cvEl('cv-chat-window').classList.add('hidden');
+    cvEl('cv-dialog-search').value = '';
+    cvEl('cv-peer-input').value = '';
+    cvEl('chat-viewer-modal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    updateWsIndicator(false);
+
+    loadDialogs();
+  }
+
+  function closeChatViewer() {
+    cvEl('chat-viewer-modal').classList.add('hidden');
+    document.body.style.overflow = '';
+    disconnectWs();
+    CV.identifier = null;
+    CV.currentPeerId = null;
+  }
+
+  // ── Dialog List ──────────────────────────────────────────────────
+  async function loadDialogs(append = false) {
+    if (!append) {
+      CV.dialogOffset = 0;
+      cvEl('cv-dialogs-loading').classList.remove('hidden');
+      cvEl('cv-dialog-list').classList.add('hidden');
+    }
+    try {
+      const res = await fetch(`/api/chat/dialogs?identifier=${encodeURIComponent(CV.identifier)}&limit=50&offset=${CV.dialogOffset}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'خطا در بارگذاری چت‌ها');
+
+      if (!append) {
+        CV.dialogs = data.dialogs || [];
+      } else {
+        CV.dialogs = CV.dialogs.concat(data.dialogs || []);
+      }
+      CV.dialogOffset = CV.dialogs.length;
+      CV.filteredDialogs = CV.dialogs;
+
+      cvEl('cv-dialogs-loading').classList.add('hidden');
+      cvEl('cv-dialog-list').classList.remove('hidden');
+      renderDialogList();
+
+      // Show "load more" if we got a full page
+      if ((data.dialogs || []).length >= 50) {
+        cvEl('cv-load-more-bar').classList.remove('hidden');
+      } else {
+        cvEl('cv-load-more-bar').classList.add('hidden');
+      }
+    } catch (e) {
+      cvEl('cv-dialogs-loading').innerHTML = `<div class="text-center text-rose-400 text-xs p-4" style="direction:rtl"><i class="ph-bold ph-warning block text-2xl mb-1"></i>${e.message}</div>`;
+    }
+  }
+
+  function loadMoreDialogs() {
+    loadDialogs(true);
+  }
+
+  function filterDialogs() {
+    const q = (cvEl('cv-dialog-search').value || '').toLowerCase().trim();
+    CV.filteredDialogs = q
+      ? CV.dialogs.filter(d => (d.name || '').toLowerCase().includes(q) || (d.username || '').toLowerCase().includes(q) || (d.id || '').includes(q))
+      : CV.dialogs;
+    renderDialogList();
+  }
+
+  function renderDialogList() {
+    const container = cvEl('cv-dialog-list');
+    if (!CV.filteredDialogs.length) {
+      container.innerHTML = `<div class="p-4 text-center text-slate-500 text-xs" style="direction:rtl">هیچ چتی یافت نشد</div>`;
+      return;
+    }
+    container.innerHTML = CV.filteredDialogs.map(d => {
+      const isActive = d.id === CV.currentPeerId;
+      const unread = d.unread_count > 0 ? `<span class="min-w-[18px] h-[18px] px-1 rounded-full bg-cyan-500 text-white text-[10px] font-bold flex items-center justify-center">${d.unread_count > 99 ? '99+' : d.unread_count}</span>` : '';
+      const typeIconHtml = cvTypeIcon(d.type);
+      const arrow = d.last_is_outgoing ? '<i class="ph-bold ph-check text-[10px] text-cyan-400 shrink-0"></i> ' : '';
+      return `
+        <div onclick="selectPeer('${escapeHtml(d.id)}', '${escapeHtml(d.name)}', '${d.type}', '${d.avatar_color}', '${escapeHtml(d.avatar_letter)}')"
+             class="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition ${isActive ? 'bg-slate-600/40' : 'hover:bg-slate-700/30'}">
+          ${cvAvatarHtml(d.avatar_letter, d.avatar_color, 'w-11 h-11', 'text-base')}
+          <div class="flex-1 min-w-0" style="direction:rtl">
+            <div class="flex items-center justify-between gap-1">
+              <span class="text-sm font-semibold text-white truncate flex items-center gap-1">${typeIconHtml}${escapeHtml(d.name)}</span>
+              <span class="text-[10px] text-slate-500 shrink-0">${cvFmt(d.last_date)}</span>
+            </div>
+            <div class="flex items-center justify-between gap-1 mt-0.5">
+              <span class="text-xs text-slate-400 truncate">${arrow}${escapeHtml(d.last_message || '')}</span>
+              ${unread}
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // ── Peer Selection & Messages ─────────────────────────────────────
+  async function selectPeer(peerId, peerName, peerType, avatarColor, avatarLetter) {
+    CV.currentPeerId = peerId;
+    CV.currentPeerName = peerName;
+    CV.currentPeerType = peerType;
+    CV.messagesOldestId = null;
+
+    // Highlight selected in sidebar
+    renderDialogList();
+
+    // Show chat window
+    cvEl('cv-empty-state').classList.add('hidden');
+    cvEl('cv-chat-window').classList.remove('hidden');
+
+    // Update peer top bar
+    const avatarEl = cvEl('cv-chat-peer-avatar');
+    avatarEl.className = `w-9 h-9 rounded-full flex items-center justify-center text-base font-bold text-white shrink-0 ${avatarColor}`;
+    avatarEl.textContent = avatarLetter;
+
+    cvEl('cv-chat-peer-name').textContent = peerName;
+    cvEl('cv-chat-peer-sub').textContent = cvTypeLabel(peerType);
+
+    // Update header
+    const headerAvatar = cvEl('cv-peer-avatar-header');
+    headerAvatar.className = `w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0 ${avatarColor}`;
+    headerAvatar.textContent = avatarLetter;
+    cvEl('cv-peer-name-header').textContent = peerName;
+    cvEl('cv-peer-type-header').textContent = cvTypeLabel(peerType);
+    cvEl('cv-peer-header').classList.remove('hidden');
+    cvEl('cv-peer-header').classList.add('flex');
+
+    // Send area visibility (channels can't be written to)
+    CV.canWrite = (peerType !== 'channel');
+    cvEl('cv-send-area').style.display = CV.canWrite ? 'flex' : 'none';
+    cvEl('cv-cant-write-notice').classList.toggle('hidden', CV.canWrite);
+
+    // Connect WebSocket for real-time
+    connectWs(peerId);
+
+    // Load messages
+    cvEl('cv-messages').innerHTML = `<div class="flex justify-center py-8"><i class="ph-bold ph-circle-notch text-2xl animate-spin text-cyan-500"></i></div>`;
+    cvEl('cv-load-older-bar').classList.add('hidden');
+    await fetchMessages(0);
+  }
+
+  async function openPeerFromInput() {
+    const val = (cvEl('cv-peer-input').value || '').trim();
+    if (!val) return;
+    try {
+      const res = await fetch(`/api/chat/peer-info?identifier=${encodeURIComponent(CV.identifier)}&peer=${encodeURIComponent(val)}`);
+      const info = await res.json();
+      if (!res.ok) throw new Error(info.detail || 'مخاطب یافت نشد');
+      await selectPeer(info.id, info.name, info.type, info.avatar_color, info.avatar_letter);
+      cvEl('cv-peer-input').value = '';
+    } catch (e) {
+      alert('خطا: ' + e.message);
+    }
+  }
+
+  async function fetchMessages(offsetId = 0) {
+    try {
+      const url = `/api/chat/messages?identifier=${encodeURIComponent(CV.identifier)}&peer=${encodeURIComponent(CV.currentPeerId)}&limit=50&offset_id=${offsetId}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'خطا');
+
+      const msgs = data.messages || [];
+      if (offsetId === 0) {
+        // Fresh load
+        renderMessages(msgs, false);
+        CV.messagesOldestId = msgs.length > 0 ? msgs[0].id : null;
+        scrollToBottom();
+      } else {
+        // Prepend older messages
+        prependMessages(msgs);
+        if (msgs.length > 0) CV.messagesOldestId = msgs[0].id;
+      }
+      cvEl('cv-load-older-bar').classList.toggle('hidden', msgs.length < 50);
+    } catch (e) {
+      cvEl('cv-messages').innerHTML = `<div class="text-center text-rose-400 text-xs p-4" style="direction:rtl">${escapeHtml(e.message)}</div>`;
+    }
+  }
+
+  async function loadOlderMessages() {
+    if (!CV.messagesOldestId) return;
+    await fetchMessages(CV.messagesOldestId);
+  }
+
+  async function refreshMessages() {
+    if (!CV.currentPeerId) return;
+    CV.messagesOldestId = null;
+    cvEl('cv-messages').innerHTML = `<div class="flex justify-center py-8"><i class="ph-bold ph-circle-notch text-2xl animate-spin text-cyan-500"></i></div>`;
+    await fetchMessages(0);
+  }
+
+  // ── Message Rendering ─────────────────────────────────────────────
+  function buildMessageHtml(msg) {
+    const out = msg.is_outgoing;
+    const align = out ? 'items-end' : 'items-start';
+    const bubbleBase = out
+      ? 'bg-[#2b5278] text-white rounded-2xl rounded-br-sm'
+      : 'bg-[#182533] text-white rounded-2xl rounded-bl-sm';
+
+    let content = '';
+    if (msg.media_type && msg.media_type !== 'webpage') {
+      const mediaIcons = {
+        photo: '<i class="ph-bold ph-image text-sky-400"></i> تصویر',
+        video: '<i class="ph-bold ph-video text-purple-400"></i> ویدیو',
+        audio: '<i class="ph-bold ph-music-note text-green-400"></i> صدا',
+        voice: '<i class="ph-bold ph-microphone text-emerald-400"></i> پیام صوتی',
+        sticker: '<i class="ph-bold ph-sticker text-yellow-400"></i> استیکر',
+        document: '<i class="ph-bold ph-file text-orange-400"></i> فایل',
+        other: '<i class="ph-bold ph-paperclip text-slate-400"></i> رسانه',
+      };
+      const icon = mediaIcons[msg.media_type] || mediaIcons.other;
+      content += `<div class="flex items-center gap-1.5 text-xs italic text-slate-300 mb-0.5">${icon}</div>`;
+    }
+
+    if (msg.reply_to_id) {
+      content += `<div class="border-r-2 border-cyan-400/60 pr-2 mb-1 text-[11px] text-slate-400 italic">↩ در پاسخ به پیام ${msg.reply_to_id}</div>`;
+    }
+
+    if (msg.forwarded) {
+      content += `<div class="text-[11px] text-cyan-400/80 mb-0.5 flex items-center gap-1"><i class="ph-bold ph-arrow-bend-up-right text-xs"></i> فوروارد شده</div>`;
+    }
+
+    const textHtml = msg.text
+      ? `<div class="text-sm leading-relaxed break-words whitespace-pre-wrap" style="direction:rtl;text-align:right;unicode-bidi:plaintext">${escapeHtml(msg.text)}</div>`
+      : '';
+    content += textHtml;
+
+    const senderLabel = (!out && msg.sender_name && CV.currentPeerType !== 'user')
+      ? `<div class="text-[11px] font-semibold mb-0.5" style="color:#7ec8e3;direction:rtl">${escapeHtml(msg.sender_name)}</div>`
+      : '';
+
+    const metaRow = `<div class="flex items-center gap-1 mt-1 justify-end" style="direction:ltr">
+      ${out ? '<i class="ph-bold ph-check-circle text-[10px] text-cyan-400/70"></i>' : ''}
+      <span class="text-[10px] text-slate-400">${cvFmtTime(msg.date)}</span>
+      ${msg.views ? `<span class="text-[10px] text-slate-500 flex items-center gap-0.5"><i class="ph-bold ph-eye text-[9px]"></i>${msg.views}</span>` : ''}
+    </div>`;
+
+    return `
+      <div class="flex flex-col ${align} px-2" data-msg-id="${msg.id}">
+        <div class="max-w-[70%] px-3 py-2 ${bubbleBase} shadow-sm">
+          ${senderLabel}${content}${metaRow}
+        </div>
+      </div>`;
+  }
+
+  function renderMessages(msgs, prepend = false) {
+    const container = cvEl('cv-messages');
+    const html = msgs.map(buildMessageHtml).join('');
+    if (prepend) {
+      container.insertAdjacentHTML('afterbegin', html);
+    } else {
+      container.innerHTML = html || `<div class="text-center text-slate-600 text-sm py-8" style="direction:rtl">پیامی وجود ندارد</div>`;
+    }
+  }
+
+  function prependMessages(msgs) {
+    const container = cvEl('cv-messages');
+    const prevScroll = container.scrollHeight - container.scrollTop;
+    renderMessages(msgs, true);
+    container.scrollTop = container.scrollHeight - prevScroll;
+  }
+
+  function appendMessage(msg) {
+    const container = cvEl('cv-messages');
+    const wasAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 60;
+    container.insertAdjacentHTML('beforeend', buildMessageHtml(msg));
+    if (wasAtBottom) scrollToBottom();
+  }
+
+  function scrollToBottom() {
+    const el = cvEl('cv-messages');
+    el.scrollTop = el.scrollHeight;
+  }
+
+  // ── Send Message ─────────────────────────────────────────────────
+  function handleChatKeyDown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  }
+
+  async function sendChatMessage() {
+    if (CV.pendingSend || !CV.currentPeerId) return;
+    const input = cvEl('cv-message-input');
+    const text = (input.value || '').trim();
+    if (!text) return;
+
+    CV.pendingSend = true;
+    const btn = cvEl('cv-send-btn');
+    btn.innerHTML = '<i class="ph-bold ph-circle-notch animate-spin text-base"></i>';
+    btn.disabled = true;
+
+    try {
+      const res = await fetch('/api/chat/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: CV.identifier, peer: CV.currentPeerId, text })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'خطا در ارسال');
+      input.value = '';
+      input.style.height = 'auto';
+      // Message will arrive via WebSocket, but also append immediately for responsiveness
+      appendMessage(data.message);
+    } catch (e) {
+      alert('خطا در ارسال: ' + e.message);
+    } finally {
+      CV.pendingSend = false;
+      btn.innerHTML = '<i class="ph-bold ph-paper-plane-tilt text-base" style="transform:rotate(-45deg)"></i>';
+      btn.disabled = false;
+    }
+  }
+
+  // ── WebSocket ────────────────────────────────────────────────────
+  function connectWs(peerId) {
+    disconnectWs();
+    if (!CV.identifier) return;
+
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const url = `${proto}://${location.host}/ws/chat/${encodeURIComponent(CV.identifier)}/${encodeURIComponent(peerId)}`;
+    CV.ws = new WebSocket(url);
+
+    CV.ws.onopen = () => {
+      updateWsIndicator(true);
+      // Keep-alive ping every 25s
+      CV.wsPingTimer = setInterval(() => {
+        if (CV.ws && CV.ws.readyState === WebSocket.OPEN) {
+          CV.ws.send(JSON.stringify({ type: 'ping' }));
+        }
+      }, 25000);
+    };
+
+    CV.ws.onmessage = (ev) => {
+      try {
+        const payload = JSON.parse(ev.data);
+        if (payload.type === 'new_message') {
+          const msg = payload.message;
+          // Only show if it belongs to the currently open peer
+          const msgPeer = msg._peer_id || '';
+          if (!msgPeer || msgPeer === CV.currentPeerId) {
+            appendMessage(msg);
+          }
+          // Update last message preview in dialog list
+          const dialog = CV.dialogs.find(d => d.id === msgPeer || d.id === CV.currentPeerId);
+          if (dialog) {
+            dialog.last_message = msg.text || '[رسانه]';
+            dialog.last_date = msg.date;
+            dialog.last_is_outgoing = msg.is_outgoing;
+            renderDialogList();
+          }
+        }
+      } catch (_) {}
+    };
+
+    CV.ws.onclose = () => {
+      updateWsIndicator(false);
+      clearInterval(CV.wsPingTimer);
+      // Auto-reconnect after 4s if modal is still open & same peer
+      if (CV.identifier && CV.currentPeerId === peerId) {
+        CV.wsReconnectTimer = setTimeout(() => connectWs(peerId), 4000);
+      }
+    };
+
+    CV.ws.onerror = () => {
+      updateWsIndicator(false);
+    };
+  }
+
+  function disconnectWs() {
+    clearTimeout(CV.wsReconnectTimer);
+    clearInterval(CV.wsPingTimer);
+    if (CV.ws) {
+      CV.ws.onclose = null; // prevent auto-reconnect on manual close
+      CV.ws.close();
+      CV.ws = null;
+    }
+    updateWsIndicator(false);
+  }
+
+  function updateWsIndicator(connected) {
+    const dot = cvEl('cv-ws-dot');
+    const label = cvEl('cv-ws-label');
+    if (!dot || !label) return;
+    if (connected) {
+      dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+      label.textContent = 'زنده';
+      label.className = 'text-emerald-400';
+    } else {
+      dot.className = 'w-2 h-2 rounded-full bg-slate-600';
+      label.textContent = 'آفلاین';
+      label.className = 'text-slate-400';
+    }
+  }
+
+  // Close modal on backdrop click
+  cvEl('chat-viewer-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeChatViewer();
+  });
+
+  // Close on Escape
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && !cvEl('chat-viewer-modal').classList.contains('hidden')) {
+      closeChatViewer();
+    }
+  });
   </script>
 </body>
 </html>
