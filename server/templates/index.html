@@ -689,25 +689,51 @@
       </div>
 
       <!-- Live summary stats of existing vs new -->
-      <div class="grid grid-cols-3 gap-2 bg-slate-900/60 p-3 rounded-xl border border-slate-800 text-center">
+      <div class="grid grid-cols-4 gap-2 bg-slate-900/60 p-3 rounded-xl border border-slate-800 text-center">
         <div>
           <span class="text-[10px] text-slate-400 block">سشن‌های سالم</span>
           <span id="batch-total-healthy-count" class="font-mono text-xs font-bold text-slate-200">۰</span>
+        </div>
+        <div>
+          <span class="text-[10px] text-indigo-400 block">پس از فیلتر</span>
+          <span id="batch-filtered-count" class="font-mono text-xs font-bold text-indigo-300">۰</span>
         </div>
         <div>
           <span class="text-[10px] text-emerald-400 block">از قبل ساخته‌شده</span>
           <span id="batch-existing-count" class="font-mono text-xs font-bold text-emerald-300">۰</span>
         </div>
         <div>
-          <span class="text-[10px] text-indigo-400 block">جدید (نیاز به ساخت)</span>
-          <span id="batch-new-count" class="font-mono text-xs font-bold text-indigo-300">۰</span>
+          <span class="text-[10px] text-amber-400 block">جدید (نیاز به ساخت)</span>
+          <span id="batch-new-count" class="font-mono text-xs font-bold text-amber-300">۰</span>
         </div>
       </div>
 
       <div class="space-y-3 text-xs">
+        <!-- Source Filter by Category / Remark -->
+        <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-700 space-y-2.5">
+          <p class="text-[11px] text-slate-300 font-semibold flex items-center gap-1.5">
+            <i class="ph-bold ph-funnel text-indigo-400"></i>
+            فیلتر سشن‌های مبدأ (بر اساس دسته‌بندی / ریمارک قبلی)
+          </p>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-slate-400 mb-1 text-[11px]">دسته‌بندی مبدأ:</label>
+              <select id="batch-migrate-source-category" onchange="updateBatchMigrateStats()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs focus:outline-none focus:border-indigo-500">
+                <option value="">همه دسته‌ها</option>
+                <option value="__nocat__">فقط بدون دسته‌بندی</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1 text-[11px]">ریمارک مبدأ:</label>
+              <input type="text" id="batch-migrate-source-remark" oninput="updateBatchMigrateStats()" placeholder="جستجو در ریمارک..." class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs focus:outline-none focus:border-indigo-500">
+            </div>
+          </div>
+          <p class="text-[10px] text-slate-500">فقط سشن‌های مبدأی که با این فیلترها تطابق دارند وارد فرآیند ساخت می‌شوند.</p>
+        </div>
+
         <!-- Skip Existing Checkbox Option -->
         <div class="bg-indigo-950/30 p-3 rounded-xl border border-indigo-500/30 flex items-start gap-2.5">
-          <input type="checkbox" id="batch-migrate-skip-existing" checked onchange="updateBatchMigrateButtonText()" class="mt-0.5 rounded bg-slate-800 border-indigo-500/50 text-indigo-500 focus:ring-0 focus:ring-offset-0 w-4 h-4 cursor-pointer">
+          <input type="checkbox" id="batch-migrate-skip-existing" checked onchange="updateBatchMigrateStats()" class="mt-0.5 rounded bg-slate-800 border-indigo-500/50 text-indigo-500 focus:ring-0 focus:ring-offset-0 w-4 h-4 cursor-pointer">
           <label for="batch-migrate-skip-existing" class="cursor-pointer text-slate-200 select-none">
             <span class="font-bold block text-white text-xs">فقط ساخت سشن‌های جدید (سشن‌های موجود رد شوند)</span>
             <span class="text-[11px] text-slate-400 block mt-0.5 leading-relaxed">اگر فعال باشد، اکانت‌هایی که قبلاً سشن‌شان در سرور مقصد ساخته شده نادیده گرفته می‌شوند و دوباره برایشان کد ارسال نمی‌شود.</span>
@@ -1971,9 +1997,63 @@
 
     function openBatchMigrateModal() {
       populateProxyDropdown();
+      populateBatchMigrateSourceCategories();
 
-      // Calculate counts of healthy, existing, and new
+      // Calculate counts of healthy sessions
       const healthyPhones = allSourceSessions.filter(s => s.is_authorized && s.status === 'active' && s.phone && !['N/A', 'Deactivated', 'Error', 'Unknown'].includes(s.phone));
+      document.getElementById('batch-total-healthy-count').innerText = healthyPhones.length;
+
+      // Clear source filter inputs so stats are fresh
+      document.getElementById('batch-migrate-source-remark').value = '';
+      document.getElementById('batch-migrate-source-category').value = '';
+
+      updateBatchMigrateStats();
+      document.getElementById('batch-migrate-modal').classList.remove('hidden');
+    }
+
+    function populateBatchMigrateSourceCategories() {
+      const select = document.getElementById('batch-migrate-source-category');
+      const currentVal = select.value;
+      // Keep first two static options, remove the rest
+      while (select.options.length > 2) select.remove(2);
+      // Collect distinct categories from source sessions
+      const cats = new Set();
+      allSourceSessions.forEach(s => { if (s.category && s.category.trim()) cats.add(s.category.trim()); });
+      cats.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = cat;
+        select.appendChild(opt);
+      });
+      // Restore selection if still valid
+      if ([...select.options].some(o => o.value === currentVal)) select.value = currentVal;
+    }
+
+    function getFilteredHealthyPhones() {
+      const srcCat = (document.getElementById('batch-migrate-source-category')?.value || '').trim();
+      const srcRem = (document.getElementById('batch-migrate-source-remark')?.value || '').trim().toLowerCase();
+
+      const healthyPhones = allSourceSessions.filter(s =>
+        s.is_authorized && s.status === 'active' && s.phone &&
+        !['N/A', 'Deactivated', 'Error', 'Unknown'].includes(s.phone)
+      );
+
+      if (!srcCat && !srcRem) return healthyPhones;
+
+      return healthyPhones.filter(s => {
+        const cat = (s.category || '').trim();
+        const rem = (s.remark || '').trim().toLowerCase();
+
+        if (srcCat) {
+          if (srcCat === '__nocat__') { if (cat !== '') return false; }
+          else { if (cat !== srcCat) return false; }
+        }
+        if (srcRem && !rem.includes(srcRem)) return false;
+        return true;
+      });
+    }
+
+    function updateBatchMigrateStats() {
       const targetPhoneSet = new Set();
       allTargetSessions.forEach(t => {
         if (t.phone) {
@@ -1990,9 +2070,10 @@
         }
       });
 
+      const filteredPhones = getFilteredHealthyPhones();
       let existingCount = 0;
       let newCount = 0;
-      healthyPhones.forEach(s => {
+      filteredPhones.forEach(s => {
         const p = s.phone.trim();
         const pNoPlus = p.replace('+', '');
         const pPlus = '+' + pNoPlus;
@@ -2003,18 +2084,17 @@
         }
       });
 
-      document.getElementById('batch-total-healthy-count').innerText = healthyPhones.length;
+      document.getElementById('batch-filtered-count').innerText = filteredPhones.length;
       document.getElementById('batch-existing-count').innerText = existingCount;
       document.getElementById('batch-new-count').innerText = newCount;
 
       updateBatchMigrateButtonText();
-      document.getElementById('batch-migrate-modal').classList.remove('hidden');
     }
 
     function updateBatchMigrateButtonText() {
       const skipExisting = document.getElementById('batch-migrate-skip-existing').checked;
       const newCount = parseInt(document.getElementById('batch-new-count').innerText) || 0;
-      const totalCount = parseInt(document.getElementById('batch-total-healthy-count').innerText) || 0;
+      const filteredCount = parseInt(document.getElementById('batch-filtered-count').innerText) || 0;
       const btn = document.getElementById('batch-migrate-submit-btn');
 
       if (!btn) return;
@@ -2030,9 +2110,10 @@
           btn.classList.remove('opacity-50', 'cursor-not-allowed');
         }
       } else {
-        btn.innerHTML = `<i class="ph-bold ph-arrows-clockwise"></i> ساخت مجدد همه (${totalCount} سشن)`;
-        btn.disabled = false;
-        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+        btn.innerHTML = `<i class="ph-bold ph-arrows-clockwise"></i> ساخت مجدد همه (${filteredCount} سشن)`;
+        btn.disabled = filteredCount === 0;
+        if (filteredCount === 0) btn.classList.add('opacity-50', 'cursor-not-allowed');
+        else btn.classList.remove('opacity-50', 'cursor-not-allowed');
       }
     }
 
@@ -2050,6 +2131,8 @@
       const skipExisting = document.getElementById('batch-migrate-skip-existing').checked;
       const category = (document.getElementById('batch-migrate-category')?.value || '').trim();
       const remark = (document.getElementById('batch-migrate-remark')?.value || '').trim();
+      const sourceCategory = (document.getElementById('batch-migrate-source-category')?.value || '').trim();
+      const sourceRemark = (document.getElementById('batch-migrate-source-remark')?.value || '').trim();
 
       closeBatchMigrateModal();
 
@@ -2062,7 +2145,9 @@
             proxy: proxy || null,
             skip_existing: skipExisting,
             category: category || null,
-            remark: remark || null
+            remark: remark || null,
+            source_category: sourceCategory || null,
+            source_remark: sourceRemark || null
           })
         });
         const data = await res.json();

@@ -91,6 +91,9 @@ class BatchMigrateRequest(BaseModel):
     skip_existing: bool = True
     category: Optional[str] = None
     remark: Optional[str] = None
+    # Filters applied to SOURCE sessions before migration (based on their existing metadata)
+    source_category: Optional[str] = None   # "__nocat__" for uncategorized
+    source_remark: Optional[str] = None     # substring match (case-insensitive)
 
 
 class UpdateSourceMetadataRequest(BaseModel):
@@ -703,6 +706,42 @@ async def migrate_batch(req: BatchMigrateRequest):
 
     if not active_phones:
         raise HTTPException(status_code=400, detail="هیچ سشن سالم و فعالی برای ساخت سشن یافت نشد.")
+
+    # ── Filter active phones by source session metadata (category / remark) ─────
+    src_cat_filter = req.source_category.strip() if req.source_category and req.source_category.strip() else None
+    src_rem_filter = req.source_remark.strip().lower() if req.source_remark and req.source_remark.strip() else None
+
+    if src_cat_filter or src_rem_filter:
+        filtered_phones = []
+        for ph in active_phones:
+            src_meta = metadata_service.get_source_metadata(ph)
+            item_cat = (src_meta.get("category") or "").strip()
+            item_rem = (src_meta.get("remark") or "").strip().lower()
+
+            # category filter
+            if src_cat_filter is not None:
+                if src_cat_filter == "__nocat__":
+                    if item_cat != "":
+                        continue
+                else:
+                    if item_cat != src_cat_filter:
+                        continue
+
+            # remark filter (case-insensitive substring)
+            if src_rem_filter is not None:
+                if src_rem_filter not in item_rem:
+                    continue
+
+            filtered_phones.append(ph)
+
+        if not filtered_phones:
+            raise HTTPException(
+                status_code=400,
+                detail="هیچ سشن سالم و فعالی با فیلترهای دسته‌بندی / ریمارک انتخاب‌شده یافت نشد."
+            )
+        active_phones = filtered_phones
+        faulty_count = len(detailed_sessions) - len(active_phones)
+    # ─────────────────────────────────────────────────────────────────────────────
 
     # Filter out already existing target sessions if skip_existing is True
     skipped_existing_count = 0
