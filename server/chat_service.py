@@ -9,6 +9,7 @@ Provides:
 """
 
 import asyncio
+import io
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -19,6 +20,7 @@ from telethon.tl.types import (
     MessageMediaPhoto, MessageMediaDocument,
     MessageMediaWebPage,
     PeerUser, PeerChat, PeerChannel,
+    DocumentAttributeFilename,
 )
 from telethon.errors import FloodWaitError, ChatWriteForbiddenError
 
@@ -84,6 +86,56 @@ def _media_type(msg) -> Optional[str]:
     return "other"
 
 
+def _media_info(msg) -> tuple:
+    """
+    Returns (media_id, filename, mime_type) for downloadable media.
+    media_id == message id, used by Telethon download_media.
+    Returns (None, None, None) for non-downloadable or no media.
+    """
+    if msg.media is None:
+        return None, None, None
+
+    if isinstance(msg.media, MessageMediaPhoto):
+        return msg.id, "photo.jpg", "image/jpeg"
+
+    if isinstance(msg.media, MessageMediaDocument):
+        doc = msg.media.document
+        if not doc:
+            return None, None, None
+
+        # Skip stickers — no download button
+        for attr in getattr(doc, "attributes", []):
+            if "Sticker" in type(attr).__name__:
+                return None, None, None
+
+        mime = getattr(doc, "mime_type", None) or "application/octet-stream"
+
+        # Look for explicit filename attribute
+        filename = None
+        for attr in getattr(doc, "attributes", []):
+            if isinstance(attr, DocumentAttributeFilename):
+                filename = attr.file_name
+                break
+
+        if not filename:
+            ext_map = {
+                "video/mp4": "video.mp4",
+                "video/webm": "video.webm",
+                "audio/mpeg": "audio.mp3",
+                "audio/ogg": "voice.ogg",
+                "audio/mp4": "audio.m4a",
+                "image/gif": "animation.gif",
+                "image/png": "image.png",
+                "image/jpeg": "image.jpg",
+                "image/webp": "image.webp",
+            }
+            filename = ext_map.get(mime, "file")
+
+        return msg.id, filename, mime
+
+    return None, None, None
+
+
 def _serialize_message(msg, me_id: int) -> Dict[str, Any]:
     """Convert a Telethon Message object to a JSON-serializable dict."""
     sender_id = None
@@ -110,6 +162,8 @@ def _serialize_message(msg, me_id: int) -> Dict[str, Any]:
     if msg.reply_to and hasattr(msg.reply_to, "reply_to_msg_id"):
         reply_to_id = msg.reply_to.reply_to_msg_id
 
+    media_id, media_filename, media_mime = _media_info(msg)
+
     return {
         "id": msg.id,
         "text": msg.text or "",
@@ -118,6 +172,9 @@ def _serialize_message(msg, me_id: int) -> Dict[str, Any]:
         "sender_id": sender_id,
         "sender_name": sender_name,
         "media_type": _media_type(msg),
+        "has_media": media_id is not None,
+        "media_filename": media_filename,
+        "media_mime": media_mime,
         "reply_to_id": reply_to_id,
         "views": getattr(msg, "views", None),
         "forwarded": msg.fwd_from is not None,
@@ -243,6 +300,38 @@ class ChatService:
             raise RuntimeError("ارسال پیام در این چت مجاز نیست.") from None
         except Exception as e:
             raise RuntimeError(str(e)) from e
+
+    # ------------------------------------------------------------------
+    # Download media
+    # ------------------------------------------------------------------
+
+    async def download_media(
+        self, identifier: str, peer: str, message_id: int
+    ) -> tuple:
+        """
+        Downloads the media attached to a specific message.
+        Returns (bytes_data, filename, mime_type).
+        Raises ValueError if no downloadable media found.
+        """
+        client = self._get_client(identifier)
+
+        entity = await client.get_entity(self._parse_peer(peer))
+        msgs = await client.get_messages(entity, ids=[message_id])
+        if not msgs:
+            raise ValueError("پیام یافت نشد.")
+
+        msg = msgs[0] if isinstance(msgs, list) else msgs
+        if not msg or not msg.media:
+            raise ValueError("این پیام رسانه‌ای برای دانلود ندارد.")
+
+        _, filename, mime = _media_info(msg)
+        if filename is None:
+            raise ValueError("این نوع رسانه قابل دانلود نیست.")
+
+        buf = io.BytesIO()
+        await client.download_media(msg, file=buf)
+        buf.seek(0)
+        return buf.read(), filename, mime or "application/octet-stream"
 
     # ------------------------------------------------------------------
     # Real-time listener (WebSocket)
