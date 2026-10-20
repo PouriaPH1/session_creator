@@ -36,11 +36,13 @@ class TelegramSessionCreator:
         self,
         settings: Settings,
         otp_client: IOTPClient,
-        proxy: Optional[Union[tuple, dict]] = None
+        proxy: Optional[Union[tuple, dict]] = None,
+        on_2fa_required: Optional[Any] = None
     ):
         self.settings = settings
         self.otp_client = otp_client
         self.proxy = proxy
+        self.on_2fa_required = on_2fa_required
 
     async def create_single_session(
         self,
@@ -111,13 +113,30 @@ class TelegramSessionCreator:
             except SessionPasswordNeededError:
                 logger.info("2FA password required. Attempting password authentication...")
                 if not two_fa_password:
-                    raise AuthenticationFailedError(
-                        f"Account {clean_phone} requires a 2FA password, but none was provided."
-                    )
+                    if self.on_2fa_required:
+                        logger.info(f"Account {clean_phone} requires 2FA password. Prompting user in real-time...")
+                        two_fa_password = await self.on_2fa_required(clean_phone, False)
+
+                    if not two_fa_password:
+                        raise AuthenticationFailedError(
+                            f"Account {clean_phone} requires a 2FA password, but none was provided."
+                        )
                 try:
                     await client.sign_in(password=two_fa_password)
                 except PasswordHashInvalidError:
-                    raise AuthenticationFailedError(f"Invalid 2FA password for {clean_phone}.")
+                    if self.on_2fa_required:
+                        logger.warning(f"Invalid 2FA password for {clean_phone}. Requesting retry from user in real-time...")
+                        retry_pwd = await self.on_2fa_required(clean_phone, True)
+                        if retry_pwd:
+                            try:
+                                await client.sign_in(password=retry_pwd)
+                                two_fa_password = retry_pwd
+                            except PasswordHashInvalidError:
+                                raise AuthenticationFailedError(f"Invalid 2FA password for {clean_phone}.")
+                        else:
+                            raise AuthenticationFailedError(f"Invalid 2FA password for {clean_phone}.")
+                    else:
+                        raise AuthenticationFailedError(f"Invalid 2FA password for {clean_phone}.")
 
             # 4. Verify Authorization
             if not await client.is_user_authorized():

@@ -57,6 +57,12 @@ class MigrationJobManager:
         self.logs: List[str] = []
         self._lock = asyncio.Lock()
         self._current_task: Optional[asyncio.Task] = None
+        self.waiting_2fa: bool = False
+        self.waiting_2fa_phone: Optional[str] = None
+        self.waiting_2fa_is_retry: bool = False
+        self._2fa_event: Optional[asyncio.Event] = None
+        self._2fa_input_password: Optional[str] = None
+        self._2fa_skip: bool = False
 
     def get_status(self) -> Dict:
         return {
@@ -65,18 +71,92 @@ class MigrationJobManager:
             "progress": self.progress,
             "total": self.total,
             "current_phone": self.current_phone,
+            "waiting_2fa": self.waiting_2fa,
+            "waiting_2fa_phone": self.waiting_2fa_phone,
+            "waiting_2fa_is_retry": self.waiting_2fa_is_retry,
             "results": self.results,
             "logs": self.logs[-50:]  # last 50 log messages
         }
 
     def reset(self) -> None:
         """Force resets job state if stuck."""
+        if self._2fa_event and not self._2fa_event.is_set():
+            self._2fa_skip = True
+            self._2fa_event.set()
         if self._current_task and not self._current_task.done():
             self._current_task.cancel()
         self.is_running = False
         self.current_phone = None
+        self.waiting_2fa = False
+        self.waiting_2fa_phone = None
+        self.waiting_2fa_is_retry = False
+        self._2fa_event = None
+        self._2fa_input_password = None
+        self._2fa_skip = False
         self.status_text = "آماده به کار"
         self._add_log("⚠️ وضعیت عملیات به صورت دستی بازنشانی (ریست) شد.")
+
+    async def request_2fa_password(self, phone: str, is_retry: bool = False) -> Optional[str]:
+        event = asyncio.Event()
+        self.waiting_2fa = True
+        self.waiting_2fa_phone = phone
+        self.waiting_2fa_is_retry = is_retry
+        self._2fa_event = event
+        self._2fa_input_password = None
+        self._2fa_skip = False
+
+        if is_retry:
+            self.status_text = f"⚠️ رمز ۲FA برای {phone} نادرست بود! در انتظار ورود رمز صحیح در پنل..."
+            self._add_log(f"⚠️ رمز دو مرحله‌ای ذخیره‌شده یا واردشده برای {phone} اشتباه بود! لطفاً رمز صحیح را در پنل وارد کنید.")
+        else:
+            self.status_text = f"⏳ در انتظار دریافت رمز دو مرحله‌ای (۲FA) برای {phone}..."
+            self._add_log(f"⏳ اکانت {phone} به رمز دو مرحله‌ای نیاز دارد اما در سیستم ثبت نشده است. منتظر ورود رمز در پنل...")
+
+        try:
+            await asyncio.wait_for(event.wait(), timeout=180.0)
+            if self._2fa_skip:
+                self._add_log(f"⏭️ ساخت سشن برای {phone} به درخواست کاربر رد شد (Skip).")
+                return None
+            if self._2fa_input_password:
+                self._add_log(f"🔑 رمز دو مرحله‌ای برای {phone} دریافت شد. در حال ورود به اکانت...")
+                return self._2fa_input_password
+            return None
+        except asyncio.TimeoutError:
+            self._add_log(f"⏰ زمان انتظار برای ورود رمز {phone} به پایان رسید (۳ دقیقه). سشن رد شد.")
+            return None
+        finally:
+            self.waiting_2fa = False
+            self.waiting_2fa_phone = None
+            self.waiting_2fa_is_retry = False
+            self._2fa_event = None
+            self._2fa_input_password = None
+            self._2fa_skip = False
+
+    def provide_2fa(self, phone: str, password: str) -> bool:
+        if not self.waiting_2fa or not self._2fa_event:
+            return False
+        clean_req = phone.strip().replace(" ", "").lstrip("+")
+        clean_curr = (self.waiting_2fa_phone or "").strip().replace(" ", "").lstrip("+")
+        if clean_req and clean_curr and clean_req != clean_curr:
+            return False
+
+        self._2fa_input_password = password
+        self._2fa_skip = False
+        self._2fa_event.set()
+        return True
+
+    def skip_2fa(self, phone: str) -> bool:
+        if not self.waiting_2fa or not self._2fa_event:
+            return False
+        clean_req = phone.strip().replace(" ", "").lstrip("+")
+        clean_curr = (self.waiting_2fa_phone or "").strip().replace(" ", "").lstrip("+")
+        if clean_req and clean_curr and clean_req != clean_curr:
+            return False
+
+        self._2fa_skip = True
+        self._2fa_input_password = None
+        self._2fa_event.set()
+        return True
 
     async def stop(self) -> None:
         """Gracefully cancels and awaits the migration background worker."""
@@ -140,7 +220,8 @@ class MigrationJobManager:
             creator = TelegramSessionCreator(
                 settings=self.settings,
                 otp_client=self.local_otp_client,
-                proxy=parsed_proxy
+                proxy=parsed_proxy,
+                on_2fa_required=self.request_2fa_password
             )
             if proxy:
                 self._add_log(f"🌐 اتصال از طریق پروکسی: {proxy}")

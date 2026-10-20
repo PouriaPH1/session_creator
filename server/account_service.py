@@ -81,12 +81,48 @@ class AccountManagementService:
     def _save_password(self, phone: str, password: str, note: str = "") -> None:
         passwords = self._load_passwords()
         clean_phone = phone.strip().replace(" ", "")
-        passwords[clean_phone] = {
+        no_plus = clean_phone.lstrip("+")
+        with_plus = f"+{no_plus}"
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        record = {
             "password": password,
             "note": note,
-            "updated_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "updated_at": now_str
         }
+        passwords[clean_phone] = record
+        passwords[no_plus] = record
+        passwords[with_plus] = record
         self.passwords_file.write_text(json.dumps(passwords, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def get_password(self, identifier: str) -> Optional[str]:
+        clean_id = identifier.strip().replace(" ", "")
+        passwords = self._load_passwords()
+        for k in [clean_id, clean_id.lstrip("+"), f"+{clean_id.lstrip('+')}"]:
+            if k in passwords:
+                item = passwords[k]
+                return item.get("password") if isinstance(item, dict) else item
+        return None
+
+    def set_stored_password(self, identifier: str, password: str, note: str = "") -> Dict[str, Any]:
+        self._save_password(identifier, password, note=note or "ثبت دستی از پنل")
+        return {
+            "status": "success",
+            "identifier": identifier,
+            "password": password
+        }
+
+    def delete_stored_password(self, identifier: str) -> Dict[str, Any]:
+        passwords = self._load_passwords()
+        clean_id = identifier.strip().replace(" ", "")
+        keys_to_del = [clean_id, clean_id.lstrip("+"), f"+{clean_id.lstrip('+')}"]
+        deleted = False
+        for k in keys_to_del:
+            if k in passwords:
+                del passwords[k]
+                deleted = True
+        if deleted:
+            self.passwords_file.write_text(json.dumps(passwords, ensure_ascii=False, indent=2), encoding="utf-8")
+        return {"status": "deleted", "identifier": identifier}
 
     def get_all_passwords(self) -> Dict[str, Dict[str, Any]]:
         return self._load_passwords()

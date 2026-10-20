@@ -98,3 +98,66 @@ def test_batch_migrate_skip_existing_when_all_exist(tmp_path, monkeypatch):
     assert data["total_accounts"] == 0
 
 
+def test_passwords_set_and_delete_endpoints():
+    # Set stored password
+    phone = "+989999999999"
+    res = client.post("/api/accounts/passwords/set", json={
+        "identifier": phone,
+        "password": "MySecret2FA123!",
+        "note": "Unit test note"
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "success"
+    assert data["password"] == "MySecret2FA123!"
+
+    # Verify in passwords list
+    res_list = client.get("/api/accounts/passwords")
+    assert res_list.status_code == 200
+    passwords = res_list.json()
+    assert phone in passwords
+    assert passwords[phone]["password"] == "MySecret2FA123!"
+
+    # Delete password
+    res_del = client.delete(f"/api/accounts/passwords/{phone}")
+    assert res_del.status_code == 200
+
+    # Verify deleted
+    res_after = client.get("/api/accounts/passwords")
+    assert phone not in res_after.json()
+
+
+def test_migrate_provide_and_skip_2fa_endpoints():
+    from server.main import migration_manager
+    import asyncio
+
+    # When not waiting, should return 400
+    res = client.post("/api/migrate/provide-2fa", json={
+        "phone": "+989999999999",
+        "password": "test",
+        "save_to_storage": False
+    })
+    assert res.status_code == 400
+
+    # Simulate waiting state
+    migration_manager.waiting_2fa = True
+    migration_manager.waiting_2fa_phone = "+989999999999"
+    migration_manager._2fa_event = asyncio.Event()
+
+    # Provide 2FA password
+    res = client.post("/api/migrate/provide-2fa", json={
+        "phone": "+989999999999",
+        "password": "provided_password",
+        "save_to_storage": True
+    })
+    assert res.status_code == 200
+    assert migration_manager._2fa_input_password == "provided_password"
+    assert migration_manager._2fa_event.is_set()
+
+    # Reset
+    migration_manager.reset()
+    # Clean up test password
+    client.delete("/api/accounts/passwords/+989999999999")
+
+
+

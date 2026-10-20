@@ -146,6 +146,22 @@ class Set2FARequest(BaseModel):
     hint: str = ""
 
 
+class SetStoredPasswordRequest(BaseModel):
+    identifier: str
+    password: str
+    note: Optional[str] = ""
+
+
+class Provide2FARequest(BaseModel):
+    phone: str
+    password: str
+    save_to_storage: bool = True
+
+
+class Skip2FARequest(BaseModel):
+    phone: str
+
+
 class BatchRandom2FARequest(BaseModel):
     identifiers: Optional[List[str]] = None
     length: int = 12
@@ -216,7 +232,21 @@ async def list_sessions():
 
 @app.get("/api/sessions/source", summary="List detailed source sessions")
 async def list_source_sessions():
-    return pool.get_detailed_sessions()
+    sessions = pool.get_detailed_sessions()
+    passwords = account_service.get_all_passwords()
+    for s in sessions:
+        phone = s.get("phone") or s.get("session_name") or ""
+        clean_phone = phone.strip().replace(" ", "")
+        pwd = None
+        for k in [clean_phone, clean_phone.lstrip("+"), f"+{clean_phone.lstrip('+')}"]:
+            if k in passwords:
+                item = passwords[k]
+                pwd = item.get("password") if isinstance(item, dict) else item
+                if pwd:
+                    break
+        s["has_2fa"] = bool(pwd)
+        s["saved_2fa"] = pwd or ""
+    return sessions
 
 
 @app.get("/api/categories", summary="Get distinct categories across sessions")
@@ -668,7 +698,9 @@ async def migrate_single(req: SingleMigrateRequest):
 
     effective_proxy = req.proxy or proxy_service.get_default_proxy()
     pwd = req.password
-    if not pwd:
+    if pwd:
+        account_service.set_stored_password(req.phone, pwd, note="ثبت شده هنگام ساخت سشن تکی")
+    else:
         stored = account_service.get_all_passwords()
         for k in [req.phone, req.phone.lstrip("+"), f"+{req.phone.lstrip('+')}"]:
             if k in stored:
@@ -836,6 +868,34 @@ async def reset_migration():
     return {"status": "reset"}
 
 
+@app.post("/api/migrate/provide-2fa", summary="Provide 2FA password in real-time during migration")
+async def provide_migrate_2fa(req: Provide2FARequest):
+    success = migration_manager.provide_2fa(phone=req.phone, password=req.password)
+    if not success:
+        raise HTTPException(
+            status_code=400,
+            detail="در حال حاضر هیچ فرآیندی منتظر دریافت رمز برای این شماره نیست."
+        )
+    if req.save_to_storage:
+        account_service.set_stored_password(
+            identifier=req.phone,
+            password=req.password,
+            note="ثبت خودکار هنگام ساخت سشن"
+        )
+    return {"status": "success", "phone": req.phone}
+
+
+@app.post("/api/migrate/skip-2fa", summary="Skip waiting 2FA account during migration")
+async def skip_migrate_2fa(req: Skip2FARequest):
+    success = migration_manager.skip_2fa(phone=req.phone)
+    if not success:
+        raise HTTPException(
+            status_code=400,
+            detail="در حال حاضر هیچ فرآیندی منتظر دریافت رمز برای این شماره نیست."
+        )
+    return {"status": "skipped", "phone": req.phone}
+
+
 # ==========================================
 # Proxy Management API
 # ==========================================
@@ -959,6 +1019,20 @@ async def import_passwords_csv(file: UploadFile = File(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/accounts/passwords/set", summary="Set or update stored 2FA password in database")
+async def set_stored_password(req: SetStoredPasswordRequest):
+    return account_service.set_stored_password(
+        identifier=req.identifier,
+        password=req.password,
+        note=req.note or "ثبت دستی از پنل"
+    )
+
+
+@app.delete("/api/accounts/passwords/{identifier}", summary="Delete stored 2FA password from database")
+async def delete_stored_password(identifier: str):
+    return account_service.delete_stored_password(identifier)
 
 
 

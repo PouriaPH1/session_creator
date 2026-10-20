@@ -418,11 +418,11 @@
 
   <!-- 2FA Password Modal -->
   <div id="twofa-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-    <div class="glass rounded-2xl max-w-sm w-full p-6 space-y-4 border border-amber-500/40 animate-in fade-in zoom-in-95 duration-200">
+    <div class="glass rounded-2xl max-w-md w-full p-6 space-y-4 border border-amber-500/40 animate-in fade-in zoom-in-95 duration-200">
       <div class="flex items-center justify-between border-b border-slate-800 pb-3">
         <h3 class="text-sm font-bold text-white flex items-center gap-2">
           <i class="ph-bold ph-lock-key text-amber-400 text-lg"></i>
-          تنظیم رمز دو مرحله‌ای (2FA)
+          مدیریت رمز دو مرحله‌ای (۲FA)
         </h3>
         <button onclick="close2FAModal()" class="text-slate-400 hover:text-white transition">
           <i class="ph-bold ph-x text-lg"></i>
@@ -431,16 +431,75 @@
 
       <input type="hidden" id="twofa-identifier">
 
-      <div class="space-y-3 text-xs">
+      <!-- Account Badge & Current Stored Password Info -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3 space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-slate-400 text-xs">اکانت انتخاب‌شده:</span>
+          <span id="twofa-phone-badge" class="font-mono text-amber-300 font-bold text-xs bg-slate-950 px-2.5 py-0.5 rounded border border-slate-800"></span>
+        </div>
+        <div class="flex items-center justify-between pt-1 border-t border-slate-800/60" id="twofa-current-status-box">
+          <span class="text-slate-400 text-[11px]">رمز ذخیره در سیستم:</span>
+          <div id="twofa-current-status-content" class="flex items-center gap-1.5 text-xs">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="flex border-b border-slate-800 text-xs">
+        <button id="tab-btn-storage-2fa" onclick="switch2FATab('storage')" class="flex-1 pb-2 font-bold text-amber-400 border-b-2 border-amber-500 transition flex items-center justify-center gap-1.5">
+          <i class="ph-bold ph-floppy-disk"></i>
+          ذخیره در سیستم (ساخت سشن)
+        </button>
+        <button id="tab-btn-telegram-2fa" onclick="switch2FATab('telegram')" class="flex-1 pb-2 font-semibold text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition flex items-center justify-center gap-1.5">
+          <i class="ph-bold ph-telegram-logo"></i>
+          تغییر مستقیم در تلگرام
+        </button>
+      </div>
+
+      <!-- Tab 1: Save to System Storage (passwords.json) -->
+      <div id="tab-content-storage-2fa" class="space-y-3 text-xs">
+        <p class="text-[11px] text-slate-400 leading-relaxed">
+          این رمز در فایل پسوردهای سیستم ثبت می‌شود و هنگام ساخت سشن (تکی یا دسته‌جمعی) استفاده خواهد شد.
+        </p>
         <div>
-          <label class="block text-slate-400 mb-1">اکانت:</label>
-          <div id="twofa-phone-badge" class="font-mono text-amber-300 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800 font-bold"></div>
+          <label class="block text-slate-300 mb-1">رمز دو مرحله‌ای اکانت:</label>
+          <div class="flex items-center gap-2">
+            <input type="text" id="twofa-storage-password" placeholder="رمز ۲FA اکانت..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500">
+            <button onclick="generateRandomPassForStorageInput()" title="تولید رمز قوی رندوم" class="px-2.5 py-2 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 transition flex items-center shrink-0">
+              <i class="ph-bold ph-dice-five text-base"></i>
+            </button>
+          </div>
+        </div>
+        <div>
+          <label class="block text-slate-300 mb-1">یادداشت / توضیحات (اختیاری):</label>
+          <input type="text" id="twofa-storage-note" placeholder="مثلاً: رمز پیش‌فرض خرید..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-amber-500">
         </div>
 
+        <div class="flex items-center gap-2 pt-2">
+          <button onclick="saveStoredPasswordOnly()" class="flex-1 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-amber-600/30">
+            <i class="ph-bold ph-floppy-disk"></i>
+            ذخیره رمز در سیستم
+          </button>
+          <button id="twofa-storage-delete-btn" onclick="deleteCurrentStoredPassword()" class="px-3 py-2 rounded-xl text-xs font-semibold bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 transition flex items-center gap-1 hidden">
+            <i class="ph-bold ph-trash"></i>
+            حذف رمز
+          </button>
+          <button onclick="close2FAModal()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition border border-slate-700">
+            انصراف
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab 2: Change on Telegram Server directly -->
+      <div id="tab-content-telegram-2fa" class="space-y-3 text-xs hidden">
+        <p class="text-[11px] text-slate-400 leading-relaxed">
+          این بخش با اتصال به تلگرام، رمز دو مرحله‌ای اکانت را در خود سرورهای تلگرام تغییر یا تنظیم می‌کند.
+        </p>
         <div>
-          <label class="block text-slate-300 mb-1">رمز عبور جدید:</label>
+          <label class="block text-slate-300 mb-1">رمز عبور جدید تلگرام:</label>
           <div class="flex items-center gap-2">
-            <input type="text" id="twofa-new-password" placeholder="حداقل ۸ کاراکتر..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500">
+            <input type="text" id="twofa-new-password" placeholder="حداقل ۶ کاراکتر..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500">
             <button onclick="generateRandomPassForInput()" title="تولید رمز قوی رندوم" class="px-2.5 py-2 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 transition flex items-center">
               <i class="ph-bold ph-dice-five text-base"></i>
             </button>
@@ -448,7 +507,7 @@
         </div>
 
         <div>
-          <label class="block text-slate-300 mb-1">رمز فعلی (در صورت وجود):</label>
+          <label class="block text-slate-300 mb-1">رمز فعلی تلگرام (اگر قبلاً رمز داشته):</label>
           <input type="password" id="twofa-current-password" placeholder="اگر قبلاً رمزی داشته..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-500">
         </div>
 
@@ -460,10 +519,59 @@
         <div class="flex items-center gap-2 pt-2">
           <button onclick="save2FA()" class="flex-1 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-amber-600/30">
             <i class="ph-bold ph-shield-check"></i>
-            ثبت رمز ۲FA
+            تغییر رمز در تلگرام
           </button>
           <button onclick="close2FAModal()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition border border-slate-700">
             انصراف
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Real-time Migration 2FA Prompt Modal -->
+  <div id="migration-2fa-prompt-modal" class="fixed inset-0 bg-black/75 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass rounded-2xl max-w-md w-full p-6 space-y-4 border-2 border-amber-500/80 shadow-2xl shadow-amber-500/20 animate-in fade-in zoom-in-95 duration-200">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i class="ph-bold ph-lock-key-open text-amber-400 text-xl animate-pulse"></i>
+          ورود رمز دو مرحله‌ای (۲FA) در لحظه
+        </h3>
+        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+          منتظر رمز شما
+        </span>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-amber-200 leading-relaxed" id="migration-2fa-prompt-message">
+          اکانت <span id="migration-2fa-prompt-phone" class="font-mono font-bold text-white bg-slate-900 px-1.5 py-0.5 rounded mx-1">+1...</span> نیازمند رمز دو مرحله‌ای است اما رمزی برای آن تعریف نشده بود. لطفاً رمز را وارد کنید تا ساخت سشن ادامه پیدا کند:
+        </div>
+
+        <div>
+          <label class="block text-slate-300 mb-1 font-semibold">رمز دو مرحله‌ای (۲FA):</label>
+          <div class="relative">
+            <input type="password" id="migration-2fa-prompt-password" placeholder="رمز دو مرحله‌ای اکانت را وارد کنید..." class="w-full bg-slate-900 border border-amber-500/50 rounded-xl pr-3.5 pl-10 py-2.5 text-white font-mono focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition" onkeydown="if(event.key==='Enter') submitMigration2FA()">
+            <button type="button" onclick="togglePasswordVisibility('migration-2fa-prompt-password')" class="absolute left-3 top-2.5 text-slate-400 hover:text-white transition">
+              <i class="ph-bold ph-eye text-base" id="migration-2fa-prompt-password-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 pt-1">
+          <input type="checkbox" id="migration-2fa-save-storage" checked class="rounded border-slate-700 text-amber-500 focus:ring-0 bg-slate-900 cursor-pointer">
+          <label for="migration-2fa-save-storage" class="text-slate-300 cursor-pointer select-none">
+            ذخیره این رمز در سیستم برای دفعات بعدی
+          </label>
+        </div>
+
+        <div class="flex items-center gap-2 pt-2 border-t border-slate-800">
+          <button id="migration-2fa-submit-btn" onclick="submitMigration2FA()" class="flex-1 py-2.5 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white transition flex items-center justify-center gap-1.5 shadow-lg shadow-amber-600/30">
+            <i class="ph-bold ph-check text-sm"></i>
+            تایید و ادامه ساخت سشن
+          </button>
+          <button id="migration-2fa-skip-btn" onclick="skipMigration2FA()" class="px-4 py-2.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition border border-slate-700 flex items-center gap-1">
+            <i class="ph-bold ph-arrow-bend-up-left"></i>
+            رد کردن (Skip)
           </button>
         </div>
       </div>
@@ -1169,6 +1277,21 @@
             <td class="p-3">
               <span class="font-mono text-sky-300 font-bold">${item.phone || 'N/A'}</span>
               <p class="font-mono text-[10px] text-slate-500">${item.session_name}</p>
+              <div class="mt-1">
+                ${item.has_2fa ? `
+                  <button onclick="open2FAModal('${escapeHtml(item.phone || item.session_name)}')" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 transition" title="رمز دو مرحله‌ای ذخیره‌شده: ${escapeHtml(item.saved_2fa || '')} (کلیک برای ویرایش یا مشاهده)">
+                    <i class="ph-bold ph-key text-xs"></i>
+                    <span>۲FA: <strong class="tracking-wider">${escapeHtml(item.saved_2fa || 'ثبت شده')}</strong></span>
+                    <i class="ph-bold ph-pencil-simple text-[9px] text-emerald-300 mr-0.5"></i>
+                  </button>
+                ` : `
+                  <button onclick="open2FAModal('${escapeHtml(item.phone || item.session_name)}')" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-amber-500/10 text-amber-400/90 border border-amber-500/20 hover:bg-amber-500/20 transition" title="رمز دو مرحله‌ای برای این اکانت تعریف نشده است (کلیک برای ثبت تکی)">
+                    <i class="ph-bold ph-lock text-xs"></i>
+                    <span>بدون رمز ۲FA</span>
+                    <i class="ph-bold ph-plus-circle text-[9px] mr-0.5"></i>
+                  </button>
+                `}
+              </div>
             </td>
             <td class="p-3">
               <span class="font-semibold text-white">${item.first_name || 'بدون نام'}</span>
@@ -1205,7 +1328,7 @@
                 <button onclick="openProfileModal('${item.phone}', '${escapeHtml(item.first_name || '')}')" title="${isHealthy ? 'ویرایش نام و عکس پروفایل' : 'غیرقابل ویرایش (سشن مشکل‌دار)'}" ${disabledAttr} class="px-2 py-1 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 transition flex items-center gap-1 ${disabledClass}">
                   <i class="ph-bold ph-user"></i> پروفایل
                 </button>
-                <button onclick="open2FAModal('${item.phone}')" title="${isHealthy ? 'تنظیم رمز دومرحله‌ای' : 'غیرقابل تنظیم (سشن مشکل‌دار)'}" ${disabledAttr} class="px-2 py-1 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 transition flex items-center gap-1 ${disabledClass}">
+                <button onclick="open2FAModal('${escapeHtml(item.phone || item.session_name)}')" title="مدیریت رمز دومرحله‌ای (ذخیره در سیستم یا تغییر)" class="px-2 py-1 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 transition flex items-center gap-1">
                   <i class="ph-bold ph-lock-key"></i> ۲FA
                 </button>
                 <button onclick="getOTP('${item.phone}')" title="${isHealthy ? 'دریافت کد تایید تلگرام' : 'غیرقابل دریافت (سشن مشکل‌دار)'}" ${disabledAttr} class="px-2 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition flex items-center gap-1 ${disabledClass}">
@@ -1742,57 +1865,146 @@
     // =======================================================
     // 2FA Management Functions
     // =======================================================
-    function open2FAModal(identifier) {
-      document.getElementById('twofa-identifier').value = identifier;
-      document.getElementById('twofa-phone-badge').innerText = identifier;
-      document.getElementById('twofa-new-password').value = '';
-      document.getElementById('twofa-current-password').value = '';
-      document.getElementById('twofa-hint').value = '';
-      document.getElementById('twofa-modal').classList.remove('hidden');
+    function switch2FATab(tab) {
+      const tabStorageBtn = document.getElementById('tab-btn-storage-2fa');
+      const tabTelegramBtn = document.getElementById('tab-btn-telegram-2fa');
+      const contentStorage = document.getElementById('tab-content-storage-2fa');
+      const contentTelegram = document.getElementById('tab-content-telegram-2fa');
+
+      if (tab === 'storage') {
+        tabStorageBtn.className = 'flex-1 pb-2 font-bold text-amber-400 border-b-2 border-amber-500 transition flex items-center justify-center gap-1.5';
+        tabTelegramBtn.className = 'flex-1 pb-2 font-semibold text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition flex items-center justify-center gap-1.5';
+        contentStorage.classList.remove('hidden');
+        contentTelegram.classList.add('hidden');
+      } else {
+        tabTelegramBtn.className = 'flex-1 pb-2 font-bold text-amber-400 border-b-2 border-amber-500 transition flex items-center justify-center gap-1.5';
+        tabStorageBtn.className = 'flex-1 pb-2 font-semibold text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition flex items-center justify-center gap-1.5';
+        contentTelegram.classList.remove('hidden');
+        contentStorage.classList.add('hidden');
+      }
     }
 
-    function close2FAModal() {
-      document.getElementById('twofa-modal').classList.add('hidden');
-    }
-
-    function generateRandomPassForInput() {
+    function generateRandomPassForStorageInput() {
       const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
       let pass = "";
       for (let i = 0; i < 12; i++) {
         pass += chars.charAt(Math.floor(Math.random() * chars.length));
       }
-      document.getElementById('twofa-new-password').value = pass;
+      document.getElementById('twofa-storage-password').value = pass;
     }
 
-    async function save2FA() {
-      const identifier = document.getElementById('twofa-identifier').value;
-      const newPassword = document.getElementById('twofa-new-password').value;
-      const currentPassword = document.getElementById('twofa-current-password').value;
-      const hint = document.getElementById('twofa-hint').value;
+    async function open2FAModal(identifier) {
+      document.getElementById('twofa-identifier').value = identifier;
+      document.getElementById('twofa-phone-badge').innerText = identifier;
+      document.getElementById('twofa-storage-password').value = '';
+      document.getElementById('twofa-storage-note').value = '';
+      document.getElementById('twofa-new-password').value = '';
+      document.getElementById('twofa-current-password').value = '';
+      document.getElementById('twofa-hint').value = '';
 
-      if (!newPassword || newPassword.length < 6) {
-        alert("رمز عبور باید حداقل ۶ کاراکتر باشد.");
+      switch2FATab('storage');
+
+      const statusContent = document.getElementById('twofa-current-status-content');
+      const deleteBtn = document.getElementById('twofa-storage-delete-btn');
+      if (statusContent) {
+        statusContent.innerHTML = '<span class="text-slate-500 text-[11px]">در حال استعلام...</span>';
+      }
+
+      document.getElementById('twofa-modal').classList.remove('hidden');
+
+      // Check current stored password
+      try {
+        const cleanId = identifier.trim().replace(" ", "");
+        const res = await fetch('/api/accounts/passwords');
+        if (res.ok) {
+          const passwords = await res.json();
+          let matchedPwd = '';
+          let matchedNote = '';
+          for (const key of [cleanId, cleanId.replace(/^\+/, ''), `+${cleanId.replace(/^\+/, '')}`]) {
+            if (passwords && passwords[key]) {
+              const item = passwords[key];
+              matchedPwd = (typeof item === 'object' && item !== null) ? (item.password || '') : item;
+              matchedNote = (typeof item === 'object' && item !== null) ? (item.note || '') : '';
+              if (matchedPwd) break;
+            }
+          }
+
+          if (matchedPwd) {
+            document.getElementById('twofa-storage-password').value = matchedPwd;
+            document.getElementById('twofa-storage-note').value = matchedNote;
+            if (statusContent) {
+              statusContent.innerHTML = `
+                <span class="font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">${escapeHtml(matchedPwd)}</span>
+                <button onclick="navigator.clipboard.writeText('${escapeHtml(matchedPwd)}'); alert('کپی شد!');" title="کپی رمز" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300">
+                  <i class="ph-bold ph-copy text-xs"></i>
+                </button>
+              `;
+            }
+            if (deleteBtn) deleteBtn.classList.remove('hidden');
+          } else {
+            if (statusContent) {
+              statusContent.innerHTML = '<span class="text-amber-400/80 font-medium text-[11px]">رمزی در سیستم ثبت نشده است</span>';
+            }
+            if (deleteBtn) deleteBtn.classList.add('hidden');
+          }
+        }
+      } catch (err) {
+        console.warn("Could not check stored 2FA password:", err);
+      }
+    }
+
+    async function saveStoredPasswordOnly() {
+      const identifier = document.getElementById('twofa-identifier').value.trim();
+      const password = document.getElementById('twofa-storage-password').value.trim();
+      const note = document.getElementById('twofa-storage-note').value.trim();
+
+      if (!password) {
+        alert("لطفاً رمز دو مرحله‌ای را وارد کنید.");
         return;
       }
 
       try {
-        const res = await fetch('/api/accounts/2fa', {
+        const res = await fetch('/api/accounts/passwords/set', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             identifier: identifier,
-            new_password: newPassword,
-            current_password: currentPassword || null,
-            hint: hint
+            password: password,
+            note: note
           })
         });
 
         if (res.ok) {
-          alert(`رمز دو مرحله‌ای برای ${identifier} با موفقیت ثبت شد!\nرمز: ${newPassword}`);
+          alert(`رمز دو مرحله‌ای برای ${identifier} با موفقیت در سیستم ذخیره شد!`);
           close2FAModal();
+          loadSourceSessions();
         } else {
           const err = await res.json();
-          alert("خطا در ثبت رمز ۲FA: " + err.detail);
+          alert("خطا در ذخیره رمز: " + (err.detail || JSON.stringify(err)));
+        }
+      } catch (e) {
+        alert("خطا: " + e);
+      }
+    }
+
+    async function deleteCurrentStoredPassword() {
+      const identifier = document.getElementById('twofa-identifier').value.trim();
+      if (!confirm(`آیا مطمئن هستید که می‌خواهید رمز دو مرحله‌ای ذخیره‌شده برای ${identifier} را حذف کنید؟`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/accounts/passwords/${encodeURIComponent(identifier)}`, {
+          method: 'DELETE'
+        });
+
+        if (res.ok) {
+          alert(`رمز دو مرحله‌ای ${identifier} از سیستم حذف شد.`);
+          close2FAModal();
+          loadSourceSessions();
+        } else {
+          const err = await res.json();
+          alert("خطا در حذف رمز: " + (err.detail || JSON.stringify(err)));
         }
       } catch (e) {
         alert("خطا: " + e);
@@ -1860,22 +2072,41 @@
         const passwords = await res.json();
         const tbody = document.getElementById('passwords-table-body');
 
-        const keys = Object.keys(passwords);
-        if (keys.length === 0) {
+        // De-duplicate phones (e.g. prioritize with '+')
+        const rawKeys = Object.keys(passwords);
+        const uniqueKeys = [];
+        const seen = new Set();
+        for (const k of rawKeys) {
+          const norm = k.replace(/^\+/, '');
+          if (!seen.has(norm)) {
+            seen.add(norm);
+            uniqueKeys.push(k.startsWith('+') ? k : (rawKeys.includes(`+${norm}`) ? `+${norm}` : k));
+          }
+        }
+
+        if (uniqueKeys.length === 0) {
           tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-500">هنوز پسوردی ثبت نشده است.</td></tr>`;
         } else {
-          tbody.innerHTML = keys.map(phone => {
-            const item = passwords[phone];
+          tbody.innerHTML = uniqueKeys.map(phone => {
+            const item = passwords[phone] || passwords[phone.replace(/^\+/, '')] || {};
+            const pwd = typeof item === 'object' ? (item.password || '') : item;
+            const note = typeof item === 'object' ? (item.note || '') : '';
+            const updated = typeof item === 'object' ? (item.updated_at || '') : '';
             return `
               <tr class="hover:bg-slate-900/40 transition">
-                <td class="p-3 font-mono font-bold text-sky-300">${phone}</td>
-                <td class="p-3 font-mono text-amber-300 font-bold select-all">${item.password}</td>
-                <td class="p-3 text-slate-400">${item.note || '-'}</td>
-                <td class="p-3 text-[11px] text-slate-500">${item.updated_at || '-'}</td>
+                <td class="p-3 font-mono font-bold text-sky-300">${escapeHtml(phone)}</td>
+                <td class="p-3 font-mono text-amber-300 font-bold select-all">${escapeHtml(pwd)}</td>
+                <td class="p-3 text-slate-400">${escapeHtml(note) || '-'}</td>
+                <td class="p-3 text-[11px] text-slate-500 font-mono">${escapeHtml(updated) || '-'}</td>
                 <td class="p-3 text-center">
-                  <button onclick="navigator.clipboard.writeText('${item.password}'); alert('کپی شد!');" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300">
-                    <i class="ph-bold ph-copy"></i>
-                  </button>
+                  <div class="flex items-center justify-center gap-1.5">
+                    <button onclick="navigator.clipboard.writeText('${escapeHtml(pwd)}'); alert('کپی شد!');" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition" title="کپی رمز">
+                      <i class="ph-bold ph-copy"></i>
+                    </button>
+                    <button onclick="deleteStoredPasswordFromList('${escapeHtml(phone)}')" class="p-1 rounded bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 border border-rose-500/20 transition" title="حذف این رمز">
+                      <i class="ph-bold ph-trash"></i>
+                    </button>
+                  </div>
                 </td>
               </tr>
             `;
@@ -1885,6 +2116,22 @@
         document.getElementById('passwords-modal').classList.remove('hidden');
       } catch (e) {
         alert("خطا در دریافت پسوردها: " + e);
+      }
+    }
+
+    async function deleteStoredPasswordFromList(phone) {
+      if (!confirm(`آیا از حذف رمز ذخیره‌شده برای اکانت ${phone} مطمئن هستید؟`)) return;
+      try {
+        const res = await fetch(`/api/accounts/passwords/${encodeURIComponent(phone)}`, { method: 'DELETE' });
+        if (res.ok) {
+          openPasswordsModal();
+          loadSourceSessions();
+        } else {
+          const err = await res.json();
+          alert("خطا در حذف رمز: " + (err.detail || "مشکل در سرور"));
+        }
+      } catch (e) {
+        alert("خطا: " + e);
       }
     }
 
@@ -2176,6 +2423,9 @@
         const res = await fetch('/api/migrate/status');
         const data = await res.json();
 
+        // Check for real-time 2FA prompt
+        handleMigration2FAPrompt(data);
+
         const progressBox = document.getElementById('migration-progress-box');
         const statStatus = document.getElementById('stat-job-status');
         const progressBarFill = document.getElementById('progress-bar-fill');
@@ -2248,6 +2498,123 @@
       } catch (e) {
         console.error("Error polling migration status:", e);
       }
+    }
+
+    // =======================================================
+    // Real-Time Migration 2FA Prompt Controls
+    // =======================================================
+    let currentWaiting2FAPhone = null;
+    function handleMigration2FAPrompt(data) {
+      const modal = document.getElementById('migration-2fa-prompt-modal');
+      if (!modal) return;
+
+      if (data.waiting_2fa && data.waiting_2fa_phone) {
+        currentWaiting2FAPhone = data.waiting_2fa_phone;
+        const phoneEl = document.getElementById('migration-2fa-prompt-phone');
+        const msgEl = document.getElementById('migration-2fa-prompt-message');
+        const inputEl = document.getElementById('migration-2fa-prompt-password');
+
+        if (phoneEl) phoneEl.innerText = data.waiting_2fa_phone;
+        if (msgEl) {
+          if (data.waiting_2fa_is_retry) {
+            msgEl.innerHTML = `⚠️ <strong class="text-rose-400">رمز قبلی برای اکانت <span class="font-mono text-white bg-slate-900 px-1.5 py-0.5 rounded mx-1">${escapeHtml(data.waiting_2fa_phone)}</span> نادرست بود!</strong> لطفاً رمز صحیح دو مرحله‌ای را وارد کنید:`;
+          } else {
+            msgEl.innerHTML = `اکانت <span class="font-mono font-bold text-white bg-slate-900 px-1.5 py-0.5 rounded mx-1">${escapeHtml(data.waiting_2fa_phone)}</span> نیازمند رمز دو مرحله‌ای (۲FA) است اما در سیستم ثبت نشده بود. لطفاً رمز را وارد نمایید تا ساخت سشن ادامه یابد:`;
+          }
+        }
+
+        if (modal.classList.contains('hidden')) {
+          modal.classList.remove('hidden');
+          if (inputEl) {
+            inputEl.value = '';
+            setTimeout(() => inputEl.focus(), 150);
+          }
+        }
+      } else {
+        if (!modal.classList.contains('hidden')) {
+          modal.classList.add('hidden');
+          currentWaiting2FAPhone = null;
+        }
+      }
+    }
+
+    async function submitMigration2FA() {
+      if (!currentWaiting2FAPhone) return;
+      const pwdInput = document.getElementById('migration-2fa-prompt-password');
+      const saveStorage = document.getElementById('migration-2fa-save-storage')?.checked ?? true;
+      const password = pwdInput ? pwdInput.value.trim() : '';
+
+      if (!password) {
+        alert("لطفاً رمز دو مرحله‌ای را وارد نمایید.");
+        return;
+      }
+
+      const submitBtn = document.getElementById('migration-2fa-submit-btn');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="ph-bold ph-spinner animate-spin"></i> در حال ارسال...';
+      }
+
+      try {
+        const res = await fetch('/api/migrate/provide-2fa', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: currentWaiting2FAPhone,
+            password: password,
+            save_to_storage: saveStorage
+          })
+        });
+
+        if (res.ok) {
+          document.getElementById('migration-2fa-prompt-modal').classList.add('hidden');
+          await checkMigrationStatus();
+          loadSourceSessions();
+        } else {
+          const err = await res.json();
+          alert("خطا: " + (err.detail || "مشکلی در ارسال رمز رخ داد."));
+        }
+      } catch (e) {
+        alert("خطا در ارسال: " + e);
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<i class="ph-bold ph-check text-sm"></i> تایید و ادامه ساخت سشن';
+        }
+      }
+    }
+
+    async function skipMigration2FA() {
+      if (!currentWaiting2FAPhone) return;
+      if (!confirm(`آیا از ساخت سشن برای اکانت ${currentWaiting2FAPhone} صرف‌نظر می‌کنید؟`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/migrate/skip-2fa', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: currentWaiting2FAPhone })
+        });
+        document.getElementById('migration-2fa-prompt-modal').classList.add('hidden');
+        await checkMigrationStatus();
+      } catch (e) {
+        alert("خطا در رد کردن: " + e);
+      }
+    }
+
+    function togglePasswordVisibility(inputId) {
+      const input = document.getElementById(inputId);
+      const eye = document.getElementById(inputId + '-eye');
+      if (!input) return;
+      if (input.type === 'password') {
+        input.type = 'text';
+        if (eye) eye.className = 'ph-bold ph-eye-slash text-base';
+      } else {
+        input.type = 'password';
+        if (eye) eye.className = 'ph-bold ph-eye text-base';
+      }
+    }
     }
 
     async function resetMigration() {
