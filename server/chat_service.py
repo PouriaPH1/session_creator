@@ -11,6 +11,7 @@ Provides:
 import asyncio
 import io
 import logging
+import math
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -332,6 +333,117 @@ class ChatService:
         await client.download_media(msg, file=buf)
         buf.seek(0)
         return buf.read(), filename, mime or "application/octet-stream"
+
+    # ------------------------------------------------------------------
+    # Stream media (for range-request / preview endpoint)
+    # ------------------------------------------------------------------
+
+    async def get_media_size(
+        self, identifier: str, peer: str, message_id: int
+    ) -> tuple:
+        """
+        Returns (total_size_bytes, filename, mime_type) without downloading.
+        Used by the stream endpoint to respond to HEAD requests and set Content-Length.
+        """
+        client = self._get_client(identifier)
+        entity = await client.get_entity(self._parse_peer(peer))
+        msgs = await client.get_messages(entity, ids=[message_id])
+        if not msgs:
+            raise ValueError("پیام یافت نشد.")
+        msg = msgs[0] if isinstance(msgs, list) else msgs
+        if not msg or not msg.media:
+            raise ValueError("این پیام رسانه‌ای ندارد.")
+
+        _, filename, mime = _media_info(msg)
+        if filename is None:
+            raise ValueError("این نوع رسانه قابل پیش‌نمایش نیست.")
+
+        # For photos, Telethon doesn't expose raw size easily — download to get size
+        # For documents, size is available directly
+        size = None
+        if isinstance(msg.media, MessageMediaDocument):
+            doc = msg.media.document
+            size = getattr(doc, "size", None)
+
+        if size is None:
+            # Fallback: download fully to measure (photos, etc.)
+            buf = io.BytesIO()
+            await client.download_media(msg, file=buf)
+            size = buf.tell()
+            buf.seek(0)
+            return size, filename, mime or "application/octet-stream", buf.read()
+
+        return size, filename, mime or "application/octet-stream", None
+
+    async def stream_media_range(
+        self, identifier: str, peer: str, message_id: int,
+        start: int, end: Optional[int]
+    ) -> tuple:
+        """
+        Download the requested byte range of a media file.
+        Returns (chunk_bytes, total_size, filename, mime_type).
+
+        For documents Telethon supports offset/limit via iter_download.
+        For photos we download fully and slice (photos are usually small).
+        """
+        client = self._get_client(identifier)
+        entity = await client.get_entity(self._parse_peer(peer))
+        msgs = await client.get_messages(entity, ids=[message_id])
+        if not msgs:
+            raise ValueError("پیام یافت نشد.")
+        msg = msgs[0] if isinstance(msgs, list) else msgs
+        if not msg or not msg.media:
+            raise ValueError("این پیام رسانه‌ای ندارد.")
+
+        _, filename, mime = _media_info(msg)
+        if filename is None:
+            raise ValueError("این نوع رسانه قابل استریم نیست.")
+
+        mime = mime or "application/octet-stream"
+
+        # ── Documents: use Telethon's iter_download with offset ──────
+        if isinstance(msg.media, MessageMediaDocument):
+            doc = msg.media.document
+            total_size = getattr(doc, "size", None)
+
+            if total_size is None:
+                # Unknown size — full download
+                buf = io.BytesIO()
+                await client.download_media(msg, file=buf)
+                data = buf.getvalue()
+                total_size = len(data)
+                if end is None:
+                    end = total_size - 1
+                end = min(end, total_size - 1)
+                return data[start:end + 1], total_size, filename, mime
+
+            if end is None:
+                end = total_size - 1
+            end = min(end, total_size - 1)
+            length = end - start + 1
+
+            # Telethon iter_download: offset must be multiple of 256 KB (262144)
+            CHUNK = 262144
+            aligned_start = (start // CHUNK) * CHUNK
+            buf = io.BytesIO()
+            async for chunk in client.iter_download(msg.media, offset=aligned_start, stride=CHUNK, limit=math.ceil((end - aligned_start + 1) / CHUNK)):
+                buf.write(chunk)
+
+            data = buf.getvalue()
+            # Trim to exact requested range
+            trim_start = start - aligned_start
+            chunk_data = data[trim_start: trim_start + length]
+            return chunk_data, total_size, filename, mime
+
+        # ── Photos / other: full download then slice ──────────────────
+        buf = io.BytesIO()
+        await client.download_media(msg, file=buf)
+        data = buf.getvalue()
+        total_size = len(data)
+        if end is None:
+            end = total_size - 1
+        end = min(end, total_size - 1)
+        return data[start: end + 1], total_size, filename, mime
 
     # ------------------------------------------------------------------
     # Real-time listener (WebSocket)
