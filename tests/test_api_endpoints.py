@@ -56,6 +56,24 @@ def test_delete_all_source_endpoint(tmp_path, monkeypatch):
     assert not dummy_file.exists()
 
 
+def test_delete_faulty_source_endpoint(tmp_path, monkeypatch):
+    from config.settings import get_settings
+    settings = get_settings()
+    test_src = tmp_path / "source_faulty"
+    test_src.mkdir(parents=True, exist_ok=True)
+    
+    # Create empty / corrupt session file
+    corrupt_file = test_src / "corrupt_test.session"
+    corrupt_file.write_text("invalid database header")
+    monkeypatch.setattr(settings, "source_sessions_dir", test_src)
+
+    res = client.delete("/api/sessions/source-faulty")
+    assert res.status_code == 200
+    assert res.json()["status"] == "deleted"
+    assert "corrupt_test" in res.json()["deleted_sessions"]
+    assert not corrupt_file.exists()
+
+
 def test_delete_all_target_endpoint(tmp_path, monkeypatch):
     from config.settings import get_settings
     settings = get_settings()

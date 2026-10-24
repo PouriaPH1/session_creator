@@ -377,6 +377,63 @@ async def delete_all_source_sessions():
     return {"status": "deleted", "deleted_count": deleted_count}
 
 
+@app.delete("/api/sessions/source-faulty", summary="Delete all faulty, expired, and deactivated source sessions")
+async def delete_faulty_source_sessions():
+    detailed = pool.get_detailed_sessions()
+    faulty_names = set()
+    for s in detailed:
+        is_healthy = s.get("is_authorized") and s.get("status") == "active"
+        if not is_healthy:
+            name = s.get("session_name")
+            if name:
+                faulty_names.add(name)
+
+    # Also detect corrupt/empty .session files on disk
+    for f in settings.source_sessions_dir.glob("*.session"):
+        if f.stat().st_size < 16:
+            faulty_names.add(f.stem)
+        else:
+            try:
+                with open(f, "rb") as fp:
+                    if fp.read(16) != b"SQLite format 3\x00":
+                        faulty_names.add(f.stem)
+            except Exception:
+                faulty_names.add(f.stem)
+
+    deleted_count = 0
+    deleted_sessions = []
+    for name in faulty_names:
+        client = pool.get_client(name)
+        if client and client.is_connected():
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
+
+        session_file = settings.source_sessions_dir / f"{name}.session"
+        if session_file.exists():
+            try:
+                session_file.unlink()
+                deleted_count += 1
+                deleted_sessions.append(name)
+            except Exception as e:
+                logger.warning(f"Error deleting session file {session_file.name}: {e}")
+
+        journal = settings.source_sessions_dir / f"{name}.session-journal"
+        if journal.exists():
+            try:
+                journal.unlink()
+            except Exception:
+                pass
+
+    await pool.reload()
+    return {
+        "status": "deleted",
+        "deleted_count": deleted_count,
+        "deleted_sessions": deleted_sessions
+    }
+
+
 @app.delete("/api/sessions/source/{session_name}", summary="Delete source session file")
 async def delete_source_session(session_name: str):
     client = pool.get_client(session_name)

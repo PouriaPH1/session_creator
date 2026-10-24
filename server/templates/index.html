@@ -175,6 +175,11 @@
                 دسته‌بندی گروهی
               </button>
 
+              <button onclick="deleteFaultySourceSessions()" title="حذف خودکار سشن‌های منقضی، دی‌اکتیو، خراب و دارای خطای اتصال" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 transition flex items-center gap-1.5 shadow-sm">
+                <i class="ph-bold ph-shield-warning"></i>
+                حذف سشن‌های مشکل‌دار
+              </button>
+
               <button onclick="deleteAllSourceSessions()" title="حذف تمام سشن‌های مبدأ از پنل" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 transition flex items-center gap-1.5 shadow-sm">
                 <i class="ph-bold ph-trash"></i>
                 حذف تمام سشن‌ها
@@ -1899,6 +1904,32 @@
         }
       } catch (e) {
         alert("خطا در ارسال درخواست حذف: " + e);
+      }
+    }
+
+    async function deleteFaultySourceSessions() {
+      const faultySessions = allSourceSessions.filter(s => !s.is_authorized || s.status !== 'active');
+      const faultyCount = faultySessions.length;
+
+      if (faultyCount === 0) {
+        alert("هیچ سشن مشکل‌دار یا منقضی‌شده‌ای وجود ندارد! تمام سشن‌ها سالم و فعال هستند.");
+        return;
+      }
+
+      const confirmed = confirm(`آیا از حذف ${faultyCount} سشن مشکل‌دار، منقضی و دی‌اکتیو اطمینان دارید؟\nسشن‌های سالم و فعال دست‌نخورده باقی خواهند ماند.`);
+      if (!confirmed) return;
+
+      try {
+        const res = await fetch('/api/sessions/source-faulty', { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok) {
+          alert(`عملیات با موفقیت انجام شد:\n${data.deleted_count || 0} سشن مشکل‌دار حذف شدند.`);
+          await initDashboard();
+        } else {
+          alert("خطا در حذف سشن‌های مشکل‌دار: " + (data.detail || "مشکل نامشخص"));
+        }
+      } catch (e) {
+        alert("خطا در ارسال درخواست: " + e);
       }
     }
 
