@@ -272,16 +272,29 @@ class AccountManagementService:
                     "is_active": (match.get("is_authorized") and match.get("status") == "active") if match else False
                 })
         else:
-            for s in detailed:
+            seen_identifiers = set()
+            # Prioritize active sessions over inactive duplicates
+            sorted_detailed = sorted(
+                detailed,
+                key=lambda s: 1 if (s.get("is_authorized") and s.get("status") == "active") else 0,
+                reverse=True
+            )
+            for s in sorted_detailed:
                 phone = s.get("phone")
                 sess_name = s.get("session_name")
                 ident = phone if (phone and phone not in ["Unknown", "N/A", "Deactivated", "Error", "Loading..."]) else sess_name
-                if ident:
-                    target_items.append({
-                        "identifier": ident,
-                        "session_name": sess_name,
-                        "is_active": bool(s.get("is_authorized") and s.get("status") == "active")
-                    })
+                if not ident:
+                    continue
+                clean_key = ident.strip().replace(" ", "").lstrip("+")
+                if clean_key in seen_identifiers:
+                    continue
+                seen_identifiers.add(clean_key)
+
+                target_items.append({
+                    "identifier": ident,
+                    "session_name": sess_name,
+                    "is_active": bool(s.get("is_authorized") and s.get("status") == "active")
+                })
 
         results = []
         logger.info(f"Starting batch 2FA assignment for {len(target_items)} account(s) (telegram_update={telegram_update})...")
