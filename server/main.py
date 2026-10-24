@@ -307,8 +307,11 @@ async def upload_sessions(
     uploaded_identifiers = []
     for file in files:
         if file.filename.endswith(".session"):
-            dest_path = settings.source_sessions_dir / file.filename
             content = await file.read()
+            if len(content) < 16 or not content.startswith(b"SQLite format 3\x00"):
+                logger.warning(f"Skipping corrupt or invalid session file (not a valid SQLite DB): {file.filename}")
+                continue
+            dest_path = settings.source_sessions_dir / file.filename
             dest_path.write_bytes(content)
             saved_count += 1
             uploaded_identifiers.append(file.filename)
@@ -319,8 +322,12 @@ async def upload_sessions(
                 with zipfile.ZipFile(io.BytesIO(content)) as z:
                     for member in z.namelist():
                         if member.endswith(".session") and not member.startswith("__MACOSX"):
+                            s_data = z.read(member)
+                            if len(s_data) < 16 or not s_data.startswith(b"SQLite format 3\x00"):
+                                logger.warning(f"Skipping corrupt or invalid session in zip: {member}")
+                                continue
                             s_name = Path(member).name
-                            (settings.source_sessions_dir / s_name).write_bytes(z.read(member))
+                            (settings.source_sessions_dir / s_name).write_bytes(s_data)
                             saved_count += 1
                             uploaded_identifiers.append(s_name)
                             uploaded_identifiers.append(Path(s_name).stem)

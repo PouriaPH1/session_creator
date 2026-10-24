@@ -60,22 +60,40 @@ class TelethonSessionPool(ISessionPool):
 
         for session_path in session_files:
             session_name = session_path.stem
-            await self._init_single_session(session_path, session_name)
+            try:
+                await self._init_single_session(session_path, session_name)
+            except Exception as e:
+                logger.error(f"Unexpected error loading session file {session_path.name}: {e}")
 
     async def _init_single_session(self, session_path: Path, session_name: str) -> None:
+        client: Optional[TelegramClient] = None
         profile = DeviceProfileFactory.get_deterministic_profile(session_name)
-        client = TelegramClient(
-            str(session_path),
-            api_id=self.settings.api_id,
-            api_hash=self.settings.api_hash,
-            device_model=profile.device_model,
-            system_version=profile.system_version,
-            app_version=profile.app_version,
-            lang_code=profile.lang_code,
-            system_lang_code=profile.system_lang_code
-        )
 
         try:
+            # Pre-validate file existence and SQLite format
+            if not session_path.exists():
+                logger.error(f"Session file does not exist: {session_path}")
+                return
+
+            if session_path.stat().st_size == 0:
+                raise ValueError("Session file is empty (0 bytes).")
+
+            with open(session_path, "rb") as f:
+                header = f.read(16)
+                if header != b"SQLite format 3\x00":
+                    raise ValueError("File is not a valid SQLite database (missing SQLite header).")
+
+            client = TelegramClient(
+                str(session_path),
+                api_id=self.settings.api_id,
+                api_hash=self.settings.api_hash,
+                device_model=profile.device_model,
+                system_version=profile.system_version,
+                app_version=profile.app_version,
+                lang_code=profile.lang_code,
+                system_lang_code=profile.system_lang_code
+            )
+
             await client.connect()
             if not await client.is_user_authorized():
                 logger.warning(f"Session {session_name} is not authorized! Skipping.")
@@ -128,22 +146,28 @@ class TelethonSessionPool(ISessionPool):
                 "is_authorized": False,
                 "status": "deactivated"
             }
-            if client.is_connected():
-                await client.disconnect()
+            if client and client.is_connected():
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
         except Exception as e:
-            logger.error(f"Failed to initialize session {session_name}: {e}")
+            logger.error(f"Failed to initialize session {session_name} ({session_path.name}): {e}")
             self._session_info[session_name] = {
                 "session_name": session_name,
                 "phone": "Error",
                 "user_id": None,
-                "first_name": "Failed",
+                "first_name": "Corrupted/Error",
                 "username": None,
                 "device_model": profile.device_model,
                 "is_authorized": False,
                 "status": "error"
             }
-            if client.is_connected():
-                await client.disconnect()
+            if client and client.is_connected():
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
 
     def get_client(self, identifier: str) -> Optional[TelegramClient]:
         """Lookup by session filename, formatted phone, or digits-only phone."""
