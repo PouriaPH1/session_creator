@@ -245,61 +245,112 @@ class AccountManagementService:
         self,
         identifiers: Optional[List[str]] = None,
         length: int = 12,
-        delay: float = 2.0
+        delay: float = 2.0,
+        telegram_update: bool = True
     ) -> List[Dict[str, Any]]:
         """
         Generates and assigns unique secure 2FA passwords to all (or selected) accounts.
-        Saves all generated passwords into storage/passwords.json.
+        If telegram_update is True, connects to Telegram and modifies the 2FA setting on Telegram servers
+        (using existing password if available to authorize the change).
+        If telegram_update is False, generates and saves passwords locally into storage/passwords.json only.
         """
-        detailed = self.pool.get_detailed_sessions()
-        authorized_phones = {
-            s["phone"] for s in detailed if s.get("is_authorized") and s.get("status") == "active"
-        }
-        authorized_names = {
-            s["session_name"] for s in detailed if s.get("is_authorized") and s.get("status") == "active"
-        }
-        valid_set = authorized_phones | authorized_names
+        # Ensure pool has finished loading
+        if hasattr(self.pool, "_lock"):
+            async with self.pool._lock:
+                detailed = self.pool.get_detailed_sessions()
+        else:
+            detailed = self.pool.get_detailed_sessions()
 
-        candidates = identifiers or [s["phone"] for s in detailed if s.get("is_authorized") and s.get("status") == "active"]
-        target_identifiers = [
-            ident for ident in candidates
-            if ident in valid_set or ident.lstrip("+") in valid_set or f"+{ident.lstrip('+')}" in valid_set
-        ]
+        target_items = []
+        if identifiers:
+            for ident in identifiers:
+                clean_id = ident.strip().replace(" ", "")
+                match = next((s for s in detailed if s.get("phone") == clean_id or s.get("session_name") == clean_id), None)
+                target_items.append({
+                    "identifier": clean_id,
+                    "session_name": match["session_name"] if match else clean_id,
+                    "is_active": (match.get("is_authorized") and match.get("status") == "active") if match else False
+                })
+        else:
+            for s in detailed:
+                phone = s.get("phone")
+                sess_name = s.get("session_name")
+                ident = phone if (phone and phone not in ["Unknown", "N/A", "Deactivated", "Error", "Loading..."]) else sess_name
+                if ident:
+                    target_items.append({
+                        "identifier": ident,
+                        "session_name": sess_name,
+                        "is_active": bool(s.get("is_authorized") and s.get("status") == "active")
+                    })
+
         results = []
+        logger.info(f"Starting batch 2FA assignment for {len(target_items)} account(s) (telegram_update={telegram_update})...")
 
-        logger.info(f"Starting batch 2FA assignment for {len(target_identifiers)} account(s)...")
+        for idx, item in enumerate(target_items, start=1):
+            ident = item["identifier"]
+            sess_name = item.get("session_name", ident)
+            new_pass = self.generate_secure_password(length=length)
 
-        for idx, ident in enumerate(target_identifiers, start=1):
-            client = self.pool.get_client(ident)
-            if not client:
-                results.append({"identifier": ident, "success": False, "error": "Not loaded"})
-                continue
+            if telegram_update:
+                if not item["is_active"]:
+                    results.append({
+                        "identifier": ident,
+                        "success": False,
+                        "error": "سشن غیرفعال یا منقضی شده است (امکان تغییر در تلگرام وجود ندارد)"
+                    })
+                    continue
 
-            try:
-                if not client.is_connected():
-                    await client.connect()
+                client = self.pool.get_client(ident) or self.pool.get_client(sess_name)
+                if not client:
+                    results.append({"identifier": ident, "success": False, "error": "سشن در استخر یافت نشد"})
+                    continue
 
-                new_pass = self.generate_secure_password(length=length)
-                await client.edit_2fa(new_password=new_pass)
-                self._save_password(ident, new_pass, note="Auto random 2FA")
+                try:
+                    if not client.is_connected():
+                        await client.connect()
 
+                    # Look up existing password if available
+                    curr_pass = self.get_password(ident) or self.get_password(sess_name)
+
+                    try:
+                        if curr_pass:
+                            await client.edit_2fa(current_password=curr_pass, new_password=new_pass)
+                        else:
+                            await client.edit_2fa(new_password=new_pass)
+                    except Exception as edit_err:
+                        # Fallback: if it failed with curr_pass, maybe 2FA was not active on Telegram
+                        if curr_pass:
+                            await client.edit_2fa(new_password=new_pass)
+                        else:
+                            raise edit_err
+
+                    self._save_password(ident, new_pass, note="Auto random 2FA (Telegram)")
+                    results.append({
+                        "identifier": ident,
+                        "success": True,
+                        "password": new_pass
+                    })
+                    logger.info(f"[{idx}/{len(target_items)}] Successfully set random 2FA on Telegram for {ident}")
+
+                except Exception as e:
+                    logger.error(f"Failed to set 2FA on Telegram for {ident}: {e}")
+                    results.append({
+                        "identifier": ident,
+                        "success": False,
+                        "error": str(e)
+                    })
+
+                if idx < len(target_items):
+                    await asyncio.sleep(delay)
+            else:
+                # Storage only (system database passwords.json)
+                self._save_password(ident, new_pass, note="Auto random 2FA (System)")
                 results.append({
                     "identifier": ident,
                     "success": True,
                     "password": new_pass
                 })
-                logger.info(f"[{idx}/{len(target_identifiers)}] Set random 2FA for {ident}")
-
-            except Exception as e:
-                logger.error(f"Failed to set 2FA for {ident}: {e}")
-                results.append({
-                    "identifier": ident,
-                    "success": False,
-                    "error": str(e)
-                })
-
-            if idx < len(target_identifiers):
-                await asyncio.sleep(delay)
+                logger.info(f"[{idx}/{len(target_items)}] Generated random 2FA for storage: {ident}")
 
         return results
 

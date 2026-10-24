@@ -172,6 +172,7 @@ class BatchRandom2FARequest(BaseModel):
     identifiers: Optional[List[str]] = None
     length: int = 12
     delay: float = 2.0
+    telegram_update: bool = True
 
 
 class BatchNamesRequest(BaseModel):
@@ -992,7 +993,8 @@ async def batch_random_2fa(req: BatchRandom2FARequest):
         results = await account_service.batch_set_random_2fa(
             identifiers=req.identifiers,
             length=req.length,
-            delay=req.delay
+            delay=req.delay,
+            telegram_update=req.telegram_update
         )
         return {
             "status": "completed",
