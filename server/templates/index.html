@@ -1266,8 +1266,8 @@
 
       tbody.innerHTML = pageItems.map(item => {
         const isHealthy = item.is_authorized && item.status === 'active';
-        const statusLabel = isHealthy ? 'فعال و سالم' : (item.status === 'deactivated' ? 'دی‌اکتیو شده' : (item.status === 'error' ? 'خطای اتصال' : 'غیرمجاز / منقضی'));
-        const statusClass = isHealthy ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30';
+        const statusLabel = isHealthy ? 'فعال و سالم' : (item.status === 'loading' ? 'در حال اتصال...' : (item.status === 'deactivated' ? 'دی‌اکتیو شده' : (item.status === 'error' ? 'خطای اتصال' : 'غیرمجاز / منقضی')));
+        const statusClass = isHealthy ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : (item.status === 'loading' ? 'bg-sky-500/10 text-sky-400 border-sky-500/30 animate-pulse' : 'bg-rose-500/10 text-rose-400 border-rose-500/30');
         const rowClass = isHealthy ? 'hover:bg-slate-900/40 transition' : 'hover:bg-rose-950/20 bg-rose-950/10 transition opacity-80';
 
         // Disable operational buttons if session is faulty

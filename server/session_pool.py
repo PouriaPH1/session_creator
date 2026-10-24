@@ -56,14 +56,35 @@ class TelethonSessionPool(ISessionPool):
             )
             return
 
-        logger.info(f"Found {len(session_files)} session file(s). Initializing...")
+        logger.info(f"Found {len(session_files)} session file(s). Initializing concurrently...")
 
+        # Pre-populate session_info so UI can display placeholder right away
         for session_path in session_files:
-            session_name = session_path.stem
-            try:
-                await self._init_single_session(session_path, session_name)
-            except Exception as e:
-                logger.error(f"Unexpected error loading session file {session_path.name}: {e}")
+            s_name = session_path.stem
+            if s_name not in self._session_info:
+                self._session_info[s_name] = {
+                    "session_name": s_name,
+                    "phone": s_name,
+                    "user_id": None,
+                    "first_name": "Connecting...",
+                    "username": None,
+                    "device_model": "Unknown",
+                    "is_authorized": False,
+                    "status": "loading"
+                }
+
+        sem = asyncio.Semaphore(10)
+
+        async def _init_worker(path: Path):
+            async with sem:
+                name = path.stem
+                try:
+                    await self._init_single_session(path, name)
+                except Exception as e:
+                    logger.error(f"Unexpected error loading session file {path.name}: {e}")
+
+        await asyncio.gather(*[_init_worker(p) for p in session_files])
+        logger.info(f"Finished initializing all {len(session_files)} session files.")
 
     async def _init_single_session(self, session_path: Path, session_name: str) -> None:
         client: Optional[TelegramClient] = None

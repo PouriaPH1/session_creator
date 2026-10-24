@@ -46,9 +46,12 @@ chat_service = ChatService(pool)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting Master Telegram Session Manager...")
-    await pool.start()
+    # Launch pool.start() concurrently so web server accepts requests immediately!
+    pool_startup_task = asyncio.create_task(pool.start())
     yield
     logger.info("Stopping Master Telegram Session Manager...")
+    if not pool_startup_task.done():
+        pool_startup_task.cancel()
     await migration_manager.stop()
     await pool.stop()
 
