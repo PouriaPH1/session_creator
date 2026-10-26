@@ -7,4 +7,5 @@ pydantic-settings>=2.2.0
 python-dotenv>=1.0.0
 python-multipart>=0.0.9
 PySocks>=1.7.1
+python-socks[asyncio]>=2.4.0
 socksio>=1.0.0

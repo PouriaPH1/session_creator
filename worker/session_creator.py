@@ -39,6 +39,16 @@ class TelegramSessionCreator:
         proxy: Optional[Union[tuple, dict]] = None,
         on_2fa_required: Optional[Any] = None
     ):
+        if proxy:
+            try:
+                import python_socks  # noqa: F401
+            except ImportError:
+                # Telethon silently ignores the proxy without python-socks and connects directly
+                raise SessionCreatorError(
+                    "Proxy requires the 'python-socks' package. "
+                    "Run: pip install -r requirements.txt"
+                )
+
         self.settings = settings
         self.otp_client = otp_client
         self.proxy = proxy
