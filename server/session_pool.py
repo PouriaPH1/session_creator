@@ -155,6 +155,10 @@ class TelethonSessionPool(ISessionPool):
 
             logger.info(f"Loaded session [{session_name}] (Phone: {clean_phone}, User ID: {me.id})")
 
+            # Idle disconnect: disconnect from Telegram to avoid dozens of persistent sockets from 1 datacenter IP.
+            # Telethon sessions stay authorized on disk and will reconnect seamlessly on-demand.
+            await client.disconnect()
+
         except (AuthKeyError, UserDeactivatedError) as e:
             logger.error(f"Session {session_name} is invalid/deactivated: {e}")
             self._session_info[session_name] = {
@@ -199,6 +203,70 @@ class TelethonSessionPool(ISessionPool):
         if not client:
             client = self._clients.get(f"+{clean_id}")
         return client
+
+    async def disconnect_client(self, identifier: str) -> bool:
+        """
+        Gracefully disconnects an individual client by phone or session name.
+        Prevents simultaneous dual-IP connections when target sessions are active.
+        """
+        client = self.get_client(identifier)
+        if client and client.is_connected():
+            try:
+                await client.disconnect()
+                logger.info(f"Disconnected client: {identifier}")
+                return True
+            except Exception as e:
+                logger.warning(f"Error disconnecting client {identifier}: {e}")
+        return False
+
+    async def archive_session(self, identifier: str) -> Optional[Path]:
+        """
+        Disconnects and moves a source session file to storage/migrated_sources
+        so that it won't be reloaded or conflict with target sessions in the future.
+        """
+        import shutil
+
+        clean_id = identifier.strip().replace(" ", "").lstrip("+")
+        await self.disconnect_client(identifier)
+
+        # Locate file in source_sessions_dir
+        source_files = list(self.settings.source_sessions_dir.glob("*.session"))
+        target_file = None
+        for f in source_files:
+            stem_clean = f.stem.lstrip("+")
+            if stem_clean == clean_id or f.stem == identifier:
+                target_file = f
+                break
+
+        if not target_file or not target_file.exists():
+            return None
+
+        archive_dir = self.settings.base_dir / "storage" / "migrated_sources"
+        archive_dir.mkdir(parents=True, exist_ok=True)
+
+        dest_file = archive_dir / target_file.name
+        shutil.move(str(target_file), str(dest_file))
+
+        # Also move journal if exists
+        journal = target_file.with_name(f"{target_file.name}-journal")
+        if journal.exists():
+            try:
+                shutil.move(str(journal), str(archive_dir / journal.name))
+            except Exception:
+                pass
+
+        # Remove from active clients mapping
+        for k in [identifier, clean_id, f"+{clean_id}", target_file.stem]:
+            self._clients.pop(k, None)
+
+        # Update cached session info status
+        for s_name, info in self._session_info.items():
+            if info.get("phone") in (identifier, clean_id, f"+{clean_id}") or s_name == target_file.stem:
+                info["status"] = "migrated"
+                info["is_authorized"] = False
+
+        logger.info(f"Archived source session {target_file.name} to {dest_file}")
+        return dest_file
 
     def list_sessions(self) -> List[str]:
         """List distinct session names loaded."""

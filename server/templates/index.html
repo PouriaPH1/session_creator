@@ -844,6 +844,15 @@
           </div>
         </div>
 
+        <!-- Archive Source Checkbox Option -->
+        <div class="bg-amber-950/20 p-2.5 rounded-xl border border-amber-500/30 flex items-start gap-2">
+          <input type="checkbox" id="single-migrate-archive-source" class="mt-0.5 rounded bg-slate-800 border-amber-500/50 text-amber-500 focus:ring-0 focus:ring-offset-0 w-4 h-4 cursor-pointer">
+          <label for="single-migrate-archive-source" class="cursor-pointer text-slate-200 select-none">
+            <span class="font-bold block text-white text-xs">بایگانی سشن مبدأ پس از موفقیت</span>
+            <span class="text-[10px] text-slate-400 block mt-0.5">انتقال فایل مبدأ به storage/migrated_sources برای جلوگیری از تداخل آی‌پی‌ها</span>
+          </label>
+        </div>
+
         <button onclick="confirmSingleMigrate()" class="w-full py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/30">
           <i class="ph-bold ph-play"></i>
           شروع ساخت سشن
@@ -927,8 +936,17 @@
 
         <div>
           <label class="block text-slate-300 mb-1">فاصله زمانی بین هر ساخت (ثانیه):</label>
-          <input type="number" id="batch-migrate-delay" value="15" min="3" max="300" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500">
-          <p class="text-[10px] text-slate-400 mt-1">پیشنهاد می‌شود جهت امنیت اکانت‌ها حداقل ۱۰ تا ۱۵ ثانیه باشد.</p>
+          <input type="number" id="batch-migrate-delay" value="60" min="15" max="600" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500">
+          <p class="text-[10px] text-slate-400 mt-1">پیشنهاد می‌شود جهت امنیت اکانت‌ها حداقل ۴۵ تا ۹۰ ثانیه باشد (تاخیر تصادفی هوشمند نیز خودکار اضافه می‌شود).</p>
+        </div>
+
+        <!-- Archive Source Checkbox Option -->
+        <div class="bg-amber-950/20 p-3 rounded-xl border border-amber-500/30 flex items-start gap-2.5">
+          <input type="checkbox" id="batch-migrate-archive-source" class="mt-0.5 rounded bg-slate-800 border-amber-500/50 text-amber-500 focus:ring-0 focus:ring-offset-0 w-4 h-4 cursor-pointer">
+          <label for="batch-migrate-archive-source" class="cursor-pointer text-slate-200 select-none">
+            <span class="font-bold block text-white text-xs">بایگانی سشن‌های مبدأ پس از مهاجرت موفق (توصیه شده)</span>
+            <span class="text-[11px] text-slate-400 block mt-0.5 leading-relaxed">فایل سشن مبدأ پس از ساخته‌شدن سشن مقصد به پوشه storage/migrated_sources منتقل می‌شود تا از تداخل دو آی‌پی در آینده و ریبوت‌ها جلوگیری شود.</span>
+          </label>
         </div>
 
         <div class="grid grid-cols-2 gap-2">
@@ -2635,9 +2653,10 @@
     }
 
     async function confirmBatchMigrate() {
-      const delay = parseFloat(document.getElementById('batch-migrate-delay').value) || 15;
+      const delay = parseFloat(document.getElementById('batch-migrate-delay').value) || 60;
       const proxy = document.getElementById('batch-migrate-proxy-select').value;
       const skipExisting = document.getElementById('batch-migrate-skip-existing').checked;
+      const archiveSource = document.getElementById('batch-migrate-archive-source')?.checked || false;
       const category = (document.getElementById('batch-migrate-category')?.value || '').trim();
       const remark = (document.getElementById('batch-migrate-remark')?.value || '').trim();
       const sourceCategory = (document.getElementById('batch-migrate-source-category')?.value || '').trim();
@@ -2656,7 +2675,8 @@
             category: category || null,
             remark: remark || null,
             source_category: sourceCategory || null,
-            source_remark: sourceRemark || null
+            source_remark: sourceRemark || null,
+            archive_source: archiveSource
           })
         });
         const data = await res.json();
@@ -3303,6 +3323,7 @@
       const proxy = document.getElementById('migrate-proxy-select').value;
       const category = (document.getElementById('migrate-target-category')?.value || '').trim();
       const remark = (document.getElementById('migrate-target-remark')?.value || '').trim();
+      const archiveSource = document.getElementById('single-migrate-archive-source')?.checked || false;
 
       closeSingleMigrateModal();
 
@@ -3315,7 +3336,8 @@
             password: pwd || null,
             proxy: proxy || null,
             category: category || null,
-            remark: remark || null
+            remark: remark || null,
+            archive_source: archiveSource
           })
         });
         const data = await res.json();

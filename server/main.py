@@ -89,10 +89,11 @@ class SingleMigrateRequest(BaseModel):
     proxy: Optional[str] = None
     category: Optional[str] = None
     remark: Optional[str] = None
+    archive_source: bool = False
 
 
 class BatchMigrateRequest(BaseModel):
-    delay: float = 15.0
+    delay: float = 60.0
     proxy: Optional[str] = None
     skip_existing: bool = True
     category: Optional[str] = None
@@ -100,6 +101,7 @@ class BatchMigrateRequest(BaseModel):
     # Filters applied to SOURCE sessions before migration (based on their existing metadata)
     source_category: Optional[str] = None   # "__nocat__" for uncategorized
     source_remark: Optional[str] = None     # substring match (case-insensitive)
+    archive_source: bool = False
 
 
 class UpdateSourceMetadataRequest(BaseModel):
@@ -788,7 +790,8 @@ async def migrate_single(req: SingleMigrateRequest):
         proxy=effective_proxy,
         skip_existing=False,
         category=req.category,
-        remark=req.remark
+        remark=req.remark,
+        archive_source=req.archive_source
     )
     if not started:
         raise HTTPException(status_code=400, detail="Failed to start migration job.")
@@ -914,7 +917,8 @@ async def migrate_batch(req: BatchMigrateRequest):
         proxy=effective_proxy,
         skip_existing=req.skip_existing,
         category=req.category,
-        remark=req.remark
+        remark=req.remark,
+        archive_source=req.archive_source
     )
     if not started:
         raise HTTPException(status_code=400, detail="Failed to start migration job.")

@@ -253,7 +253,7 @@ class ChatService:
     async def get_dialogs(
         self, identifier: str, limit: int = 50, offset: int = 0
     ) -> List[Dict[str, Any]]:
-        client = self._get_client(identifier)
+        client = await self._get_connected_client(identifier)
         me = await client.get_me()
         me_id = me.id
 
@@ -271,7 +271,7 @@ class ChatService:
         Returns (messages_oldest_first, me_id).
         messages are sorted oldest-first so the browser can append them top-to-bottom.
         """
-        client = self._get_client(identifier)
+        client = await self._get_connected_client(identifier)
         me = await client.get_me()
         me_id = me.id
 
@@ -288,7 +288,7 @@ class ChatService:
     async def send_message(
         self, identifier: str, peer: str, text: str
     ) -> Dict[str, Any]:
-        client = self._get_client(identifier)
+        client = await self._get_connected_client(identifier)
         me = await client.get_me()
 
         try:
@@ -314,7 +314,7 @@ class ChatService:
         Returns (bytes_data, filename, mime_type).
         Raises ValueError if no downloadable media found.
         """
-        client = self._get_client(identifier)
+        client = await self._get_connected_client(identifier)
 
         entity = await client.get_entity(self._parse_peer(peer))
         msgs = await client.get_messages(entity, ids=[message_id])
@@ -345,7 +345,7 @@ class ChatService:
         Returns (total_size_bytes, filename, mime_type) without downloading.
         Used by the stream endpoint to respond to HEAD requests and set Content-Length.
         """
-        client = self._get_client(identifier)
+        client = await self._get_connected_client(identifier)
         entity = await client.get_entity(self._parse_peer(peer))
         msgs = await client.get_messages(entity, ids=[message_id])
         if not msgs:
@@ -386,7 +386,7 @@ class ChatService:
         For documents Telethon supports offset/limit via iter_download.
         For photos we download fully and slice (photos are usually small).
         """
-        client = self._get_client(identifier)
+        client = await self._get_connected_client(identifier)
         entity = await client.get_entity(self._parse_peer(peer))
         msgs = await client.get_messages(entity, ids=[message_id])
         if not msgs:
@@ -513,7 +513,7 @@ class ChatService:
     # ------------------------------------------------------------------
 
     async def get_peer_info(self, identifier: str, peer: str) -> Dict[str, Any]:
-        client = self._get_client(identifier)
+        client = await self._get_connected_client(identifier)
         entity = await client.get_entity(self._parse_peer(peer))
         etype = _entity_type(entity)
 
@@ -544,6 +544,12 @@ class ChatService:
         client = self.pool.get_client(identifier)
         if not client:
             raise ValueError(f"سشن '{identifier}' یافت نشد یا فعال نیست.")
+        return client
+
+    async def _get_connected_client(self, identifier: str) -> TelegramClient:
+        client = self._get_client(identifier)
+        if not client.is_connected():
+            await client.connect()
         return client
 
     @staticmethod

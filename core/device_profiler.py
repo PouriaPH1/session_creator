@@ -61,8 +61,15 @@ class DeviceProfileFactory:
         """
         Returns a deterministic device profile based on a hash of the identifier
         (phone number or session name), ensuring consistent profile usage for the same account.
+        Normalized so that '+12345', '12345', and '+12345.session' all resolve to the identical profile.
         """
-        hash_val = int(hashlib.sha256(identifier.encode("utf-8")).hexdigest(), 16)
+        stem = str(identifier).split("/")[-1].split("\\")[-1]
+        if stem.endswith(".session"):
+            stem = stem[:-8]
+        digits_only = "".join(c for c in stem if c.isdigit())
+        clean_id = digits_only if digits_only else stem.strip().lower()
+
+        hash_val = int(hashlib.sha256(clean_id.encode("utf-8")).hexdigest(), 16)
         index = hash_val % len(cls.PROFILES)
         return cls.PROFILES[index]
 

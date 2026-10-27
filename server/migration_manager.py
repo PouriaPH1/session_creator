@@ -180,11 +180,12 @@ class MigrationJobManager:
         self,
         phones: List[str],
         two_fa_passwords: Optional[Dict[str, str]] = None,
-        delay: float = 15.0,
+        delay: float = 60.0,
         proxy: Optional[str] = None,
         skip_existing: bool = False,
         category: Optional[str] = None,
-        remark: Optional[str] = None
+        remark: Optional[str] = None,
+        archive_source: bool = False
     ) -> bool:
         """Starts batch migration in the background."""
         async with self._lock:
@@ -199,7 +200,7 @@ class MigrationJobManager:
             self.current_phone = None
 
         self._current_task = asyncio.create_task(
-            self._run_batch_worker(phones, two_fa_passwords or {}, delay, proxy, skip_existing, category, remark)
+            self._run_batch_worker(phones, two_fa_passwords or {}, delay, proxy, skip_existing, category, remark, archive_source)
         )
         return True
 
@@ -211,7 +212,8 @@ class MigrationJobManager:
         proxy: Optional[str] = None,
         skip_existing: bool = False,
         category: Optional[str] = None,
-        remark: Optional[str] = None
+        remark: Optional[str] = None,
+        archive_source: bool = False
     ) -> None:
         try:
             from server.proxy_service import parse_telethon_proxy
@@ -345,6 +347,24 @@ class MigrationJobManager:
                     })
                     self._add_log(f"[{idx}/{len(phones)}] ✅ Success for {phone} ({proxy_name})")
 
+                    # Anti-Ban / Dual-IP Protection: Disconnect source session immediately
+                    pool = getattr(self.otp_service, "session_pool", None)
+                    if pool and hasattr(pool, "disconnect_client"):
+                        try:
+                            await pool.disconnect_client(phone)
+                            self._add_log(f"🔌 سشن مبدأ {phone} دیسکانکت شد تا تداخل دو آی‌پی رخ ندهد.")
+                        except Exception as dc_err:
+                            logger.warning(f"Failed to disconnect source session {phone}: {dc_err}")
+
+                    # Optional: Archive source session file so it won't reload or conflict in the future
+                    if archive_source and pool and hasattr(pool, "archive_session"):
+                        try:
+                            archived = await pool.archive_session(phone)
+                            if archived:
+                                self._add_log(f"📦 سشن مبدأ {phone} به پوشه storage/migrated_sources منتقل و بایگانی شد.")
+                        except Exception as arch_err:
+                            logger.warning(f"Failed to archive source session {phone}: {arch_err}")
+
                 except Exception as e:
                     self.results.append({
                         "phone": phone,
@@ -357,9 +377,13 @@ class MigrationJobManager:
                 self.progress = idx
 
                 if idx < len(phones):
-                    self.status_text = f"مکث {delay} ثانیه‌ای..."
-                    self._add_log(f"Waiting {delay}s cooldown before next session...")
-                    await asyncio.sleep(delay)
+                    import random
+                    # Apply humanized random jitter to avoid algorithmic detection by Telegram
+                    jitter = round(random.uniform(3.0, 10.0), 1)
+                    cooldown = max(5.0, delay + jitter)
+                    self.status_text = f"مکث امنیتی {cooldown:.1f} ثانیه‌ای..."
+                    self._add_log(f"⏳ مکث امنیتی {cooldown:.1f} ثانیه (شامل تاخیر تصادفی) قبل از سشن بعدی...")
+                    await asyncio.sleep(cooldown)
 
             self._add_log("🎉 Batch migration finished!")
             self.status_text = "تکمیل شد"
