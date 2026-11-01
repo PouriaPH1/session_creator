@@ -150,6 +150,11 @@
             
             <!-- Batch Management Actions -->
             <div class="flex flex-wrap items-center gap-2">
+              <button onclick="openAddSessionModal()" title="افزودن مستقیم سشن بدون نیاز به آپلود فایل (صرفاً با شماره تلفن و کد تلگرام)" class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white transition-all shadow-md shadow-emerald-600/30 flex items-center gap-1.5">
+                <i class="ph-bold ph-plus-circle text-sm"></i>
+                افزودن سشن با شماره
+              </button>
+
               <button onclick="batchRandom2FAPrompt()" title="تعیین رمز رندوم قوی برای همه اکانت‌ها" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 transition flex items-center gap-1.5 shadow-sm">
                 <i class="ph-bold ph-lock-key"></i>
                 رمز رندوم همگانی (2FA)
@@ -284,10 +289,16 @@
 
         <!-- Upload Session Card -->
         <div class="glass rounded-2xl p-5 space-y-3">
-          <h2 class="text-sm font-bold text-white flex items-center gap-2">
-            <i class="ph-bold ph-upload-simple text-indigo-400"></i>
-            آپلود سشن جدید و رمزها
-          </h2>
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm font-bold text-white flex items-center gap-2">
+              <i class="ph-bold ph-upload-simple text-indigo-400"></i>
+              آپلود سشن جدید و رمزها
+            </h2>
+            <button onclick="openAddSessionModal()" title="افزودن سشن با شماره تلفن و کد تلگرام" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 transition shadow-sm">
+              <i class="ph-bold ph-phone-plus text-xs"></i>
+              ورود با شماره
+            </button>
+          </div>
           <p class="text-xs text-slate-400">فایل‌های <code class="text-indigo-300 bg-indigo-500/10 px-1 py-0.5 rounded">.session</code>، <code class="text-indigo-300 bg-indigo-500/10 px-1 py-0.5 rounded">.zip</code> یا <code class="text-indigo-300 bg-indigo-500/10 px-1 py-0.5 rounded">.csv</code> را انتخاب یا رها کنید:</p>
 
           <!-- Optional Category & Remark for Uploaded Sessions -->
@@ -307,6 +318,23 @@
             <p class="text-xs font-semibold text-slate-300">کلیک برای انتخاب فایل‌های سشن، آرشیو ZIP یا فایل CSV</p>
             <p class="text-[11px] text-slate-500 mt-1">پشتیبانی از فایل‌های فشرده ZIP حاوی .session و فایل اکسل/CSV رمزها</p>
             <input type="file" id="file-input" multiple accept=".session,.zip,.csv" class="hidden" onchange="handleFileUpload(event)">
+          </div>
+
+          <!-- Direct Phone Login Helper Box -->
+          <div class="p-3 rounded-xl bg-slate-900/70 border border-emerald-500/25 flex items-center justify-between gap-3 text-xs mt-2">
+            <div class="flex items-center gap-2.5 text-slate-300">
+              <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                <i class="ph-bold ph-device-mobile-camera text-emerald-400 text-lg"></i>
+              </div>
+              <div>
+                <span class="font-bold text-white block">سشن فایل ندارید؟</span>
+                <span class="text-slate-400 text-[11px]">با شماره تلفن و کد تلگرام، سشن را مستقیماً به پنل اضافه کنید</span>
+              </div>
+            </div>
+            <button onclick="openAddSessionModal()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1 shrink-0 shadow-sm shadow-emerald-600/30">
+              <i class="ph-bold ph-plus text-xs"></i>
+              ثبت با شماره
+            </button>
           </div>
         </div>
 
@@ -367,6 +395,217 @@
   <!-- ======================================================= -->
   <!-- MODALS -->
   <!-- ======================================================= -->
+
+  <!-- Add Session Direct via Phone (No File Needed) Modal -->
+  <div id="add-session-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass rounded-2xl max-w-lg w-full p-6 space-y-4 border border-emerald-500/40 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i class="ph-bold ph-user-plus text-emerald-400 text-lg"></i>
+          <span>افزودن سشن با شماره تلفن (بدون نیاز به فایل)</span>
+        </h3>
+        <button onclick="closeAddSessionModal()" class="text-slate-400 hover:text-white transition">
+          <i class="ph-bold ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Step Indicator Bar -->
+      <div class="flex items-center justify-between px-2 text-xs border-b border-slate-800/80 pb-3">
+        <div id="add-session-stepper-1" class="flex items-center gap-1.5 font-bold text-emerald-400">
+          <span class="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-[10px]">۱</span>
+          <span>شماره و تنظیمات</span>
+        </div>
+        <div class="w-8 h-[1px] bg-slate-800" id="stepper-line-1"></div>
+        <div id="add-session-stepper-2" class="flex items-center gap-1.5 font-semibold text-slate-500">
+          <span class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px]">۲</span>
+          <span>کد تأیید</span>
+        </div>
+        <div class="w-8 h-[1px] bg-slate-800" id="stepper-line-2"></div>
+        <div id="add-session-stepper-3" class="flex items-center gap-1.5 font-semibold text-slate-500">
+          <span class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px]">۳</span>
+          <span>رمز عبور (2FA)</span>
+        </div>
+      </div>
+
+      <!-- In-Modal Alert Message -->
+      <div id="add-session-alert" class="hidden p-3 rounded-xl text-xs flex items-start gap-2 border"></div>
+
+      <!-- STEP 1: Phone & Config -->
+      <div id="add-session-step-1" class="space-y-3.5 text-xs">
+        <div class="p-3 bg-slate-900/70 border border-slate-800 rounded-xl text-slate-300 space-y-1">
+          <div class="flex items-center gap-1.5 font-bold text-white text-xs">
+            <i class="ph-bold ph-info text-sky-400"></i>
+            راهنمای افزودن سشن
+          </div>
+          <p class="text-[11px] text-slate-400 leading-relaxed">
+            شماره اکانت را با پیش‌شماره کشور وارد نمایید. تلگرام کد ورود را ارسال خواهد کرد و پس از وارد کردن کد، سشن به صورت خودکار ساخته شده و در پنل ثبت می‌شود.
+          </p>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">
+            شماره تلفن <span class="text-rose-400">*</span>:
+          </label>
+          <div class="relative">
+            <input type="text" id="add-session-phone" placeholder="مثلاً: 989123456789+ یا 14067194320+" dir="ltr"
+                   class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 font-mono focus:outline-none focus:border-emerald-500 text-xs">
+          </div>
+          <span class="text-[10px] text-slate-500 block mt-1">فرمت با علامت + (مانند 98912... یا برای شماره‌های مجازی 1...)</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <div>
+            <label class="block text-slate-300 mb-1">دسته‌بندی (اختیاری):</label>
+            <input type="text" id="add-session-category" list="category-datalist" placeholder="مثلاً: دسته ۱، اختصاصی..."
+                   class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 text-xs">
+          </div>
+          <div>
+            <label class="block text-slate-300 mb-1">ریمارک / برچسب (اختیاری):</label>
+            <input type="text" id="add-session-remark" placeholder="مثلاً: ادمین، ثبت دستی..."
+                   class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 text-xs">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 mb-1">پروکسی اتصال (اختیاری):</label>
+          <select id="add-session-proxy" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-emerald-500 text-xs">
+            <option value="">اتصال مستقیم (بدون پروکسی / اینترنت سرور)</option>
+          </select>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+          <button type="button" onclick="closeAddSessionModal()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
+            انصراف
+          </button>
+          <button type="button" id="btn-add-session-send-code" onclick="submitAddSessionPhone()" class="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1.5 shadow-md shadow-emerald-600/30">
+            <i class="ph-bold ph-paper-plane-tilt"></i>
+            <span>دریافت کد تلگرام</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- STEP 2: Enter Telegram OTP Code -->
+      <div id="add-session-step-2" class="space-y-4 text-xs hidden">
+        <div class="p-3 bg-indigo-950/40 border border-indigo-500/30 rounded-xl text-slate-300 space-y-1 text-center">
+          <span class="text-[11px] text-slate-400 block">کد تأیید ارسال شد به شماره:</span>
+          <div id="add-session-target-phone-badge" class="font-mono text-sm font-bold text-emerald-300 select-all"></div>
+          <span id="add-session-delivery-hint" class="text-[10px] text-slate-400 block">لطفاً اپلیکیشن رسمی تلگرام یا پیامک‌های خود را بررسی نمایید.</span>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1 text-center">
+            کد تأیید تلگرام (کد ۵ رقمی):
+          </label>
+          <div class="max-w-xs mx-auto">
+            <input type="text" id="add-session-code" maxlength="7" placeholder="12345" dir="ltr"
+                   class="w-full text-center text-xl font-mono tracking-widest bg-slate-900 border-2 border-indigo-500/60 focus:border-emerald-500 rounded-xl py-2.5 text-white placeholder-slate-600 focus:outline-none transition">
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-xs px-2 text-slate-400">
+          <div id="add-session-timer-wrap" class="flex items-center gap-1">
+            <i class="ph-bold ph-clock"></i>
+            <span>زمان باقی‌مانده:</span>
+            <span id="add-session-timer" class="font-mono text-amber-300 font-bold">02:00</span>
+          </div>
+          <button type="button" id="btn-add-session-resend" onclick="resendAddSessionCode()" class="text-indigo-400 hover:text-indigo-300 font-semibold transition hidden">
+            <i class="ph-bold ph-arrow-counter-clockwise"></i> ارسال مجدد کد
+          </button>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+          <button type="button" onclick="cancelAddSession()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 transition">
+            لغو و انصراف
+          </button>
+          <button type="button" id="btn-add-session-verify-code" onclick="submitAddSessionCode()" class="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1.5 shadow-md shadow-emerald-600/30">
+            <i class="ph-bold ph-check"></i>
+            <span>تأیید کد و ورود</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- STEP 3: Enter 2FA Password (if required) -->
+      <div id="add-session-step-3" class="space-y-3.5 text-xs hidden">
+        <div class="p-3 bg-amber-950/40 border border-amber-500/30 rounded-xl text-slate-300 space-y-1">
+          <div class="flex items-center gap-1.5 font-bold text-amber-300 text-xs">
+            <i class="ph-bold ph-lock-key text-base"></i>
+            تأیید دو مرحله‌ای فعال است
+          </div>
+          <p class="text-[11px] text-slate-300 leading-relaxed">
+            این حساب تلگرام دارای گذرواژه دومرحله‌ای (Two-Step Verification) است. لطفاً رمز عبور را وارد نمایید.
+          </p>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">
+            رمز عبور دو مرحله‌ای (2FA Password):
+          </label>
+          <div class="relative">
+            <input type="password" id="add-session-password" placeholder="گذرواژه 2FA خود را وارد نمایید" dir="ltr"
+                   class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 text-xs">
+            <button type="button" onclick="toggleAddSessionPasswordVisibility()" class="absolute left-3 top-2.5 text-slate-400 hover:text-white">
+              <i class="ph-bold ph-eye" id="add-session-eye-icon"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 pt-1">
+          <input type="checkbox" id="add-session-save-password" checked class="rounded border-slate-700 bg-slate-900 text-emerald-600 focus:ring-0">
+          <label for="add-session-save-password" class="text-slate-300 text-[11px] cursor-pointer">
+            ذخیره این گذرواژه در دیتابیس پنل (برای ساخت سشن‌های بعدی و مهاجرت خودکار)
+          </label>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+          <button type="button" onclick="cancelAddSession()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
+            انصراف
+          </button>
+          <button type="button" id="btn-add-session-verify-password" onclick="submitAddSessionPassword()" class="px-5 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white transition flex items-center gap-1.5 shadow-md shadow-amber-600/30">
+            <i class="ph-bold ph-lock-key-open"></i>
+            <span>تأیید رمز و ثبت سشن</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- STEP 4: Success View -->
+      <div id="add-session-step-4" class="space-y-4 text-xs text-center py-2 hidden">
+        <div class="w-16 h-16 rounded-full bg-emerald-500/10 border-2 border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400 text-3xl">
+          <i class="ph-bold ph-check-circle"></i>
+        </div>
+        
+        <div>
+          <h4 class="text-sm font-bold text-white">سشن با موفقیت ثبت و فعال شد! 🎉</h4>
+          <p class="text-slate-400 text-[11px] mt-1">اکانت به لیست سشن‌های مبدأ پنل اضافه گردید و آماده استفاده است.</p>
+        </div>
+
+        <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3 text-right space-y-1.5 font-mono text-[11px]">
+          <div class="flex items-center justify-between text-slate-400">
+            <span>نام اکانت:</span>
+            <span id="add-session-res-name" class="font-bold text-white font-sans"></span>
+          </div>
+          <div class="flex items-center justify-between text-slate-400">
+            <span>شماره:</span>
+            <span id="add-session-res-phone" class="font-bold text-emerald-300"></span>
+          </div>
+          <div class="flex items-center justify-between text-slate-400">
+            <span>آیدی عددی:</span>
+            <span id="add-session-res-id" class="text-slate-300"></span>
+          </div>
+          <div class="flex items-center justify-between text-slate-400">
+            <span>یوزرنیم:</span>
+            <span id="add-session-res-username" class="text-indigo-300"></span>
+          </div>
+        </div>
+
+        <button type="button" onclick="finishAddSessionModal()" class="w-full py-2.5 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-md shadow-emerald-600/30">
+          متوجه شدم (بستن پنجره)
+        </button>
+      </div>
+
+    </div>
+  </div>
 
   <!-- Profile Edit & Avatar Modal -->
   <div id="profile-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
@@ -3071,6 +3310,7 @@
     function populateProxyDropdown() {
       const selectSingle = document.getElementById('migrate-proxy-select');
       const selectBatch = document.getElementById('batch-migrate-proxy-select');
+      const selectAddSession = document.getElementById('add-session-proxy');
 
       const optionsHtml = '<option value="">(مستقیم - آی‌پی سرور اول)</option>' +
         savedProxies.map(p => `
@@ -3081,6 +3321,14 @@
 
       if (selectSingle) selectSingle.innerHTML = optionsHtml;
       if (selectBatch) selectBatch.innerHTML = optionsHtml;
+      if (selectAddSession) {
+        selectAddSession.innerHTML = '<option value="">اتصال مستقیم (بدون پروکسی / اینترنت سرور)</option>' +
+          savedProxies.map(p => `
+            <option value="${p.url}" ${p.is_default ? 'selected' : ''}>
+              ${p.name} ${p.ip ? `(${p.ip})` : ''} ${p.is_default ? '⭐ پیش‌فرض' : ''}
+            </option>
+          `).join('');
+      }
     }
 
     function openProxiesModal() {
@@ -3381,6 +3629,415 @@
       if (!e.target.closest('[id^="actdrop-wrap-"]')) {
         closeAllDropdowns();
       }
+    });
+
+    // =======================================================
+    // Direct Phone Login (Add Session Without File)
+    // =======================================================
+    let addSessionState = {
+      loginId: null,
+      phone: null,
+      timerSeconds: 120,
+      timerInterval: null
+    };
+
+    function openAddSessionModal() {
+      // Reset state
+      if (addSessionState.timerInterval) {
+        clearInterval(addSessionState.timerInterval);
+        addSessionState.timerInterval = null;
+      }
+      addSessionState.loginId = null;
+      addSessionState.phone = null;
+
+      // Reset form fields
+      const phoneEl = document.getElementById('add-session-phone');
+      if (phoneEl) phoneEl.value = '';
+      const catEl = document.getElementById('add-session-category');
+      if (catEl) catEl.value = '';
+      const remEl = document.getElementById('add-session-remark');
+      if (remEl) remEl.value = '';
+      const codeEl = document.getElementById('add-session-code');
+      if (codeEl) codeEl.value = '';
+      const pwdEl = document.getElementById('add-session-password');
+      if (pwdEl) pwdEl.value = '';
+      const savePwdEl = document.getElementById('add-session-save-password');
+      if (savePwdEl) savePwdEl.checked = true;
+
+      // Populate proxies dropdown in modal
+      const proxySelect = document.getElementById('add-session-proxy');
+      if (proxySelect && typeof savedProxies !== 'undefined') {
+        proxySelect.innerHTML = '<option value="">اتصال مستقیم (بدون پروکسی / اینترنت سرور)</option>' +
+          savedProxies.map(p => `
+            <option value="${p.url}" ${p.is_default ? 'selected' : ''}>
+              ${p.name} ${p.ip ? `(${p.ip})` : ''} ${p.is_default ? '⭐ پیش‌فرض' : ''}
+            </option>
+          `).join('');
+      }
+
+      setAddSessionAlert(null);
+      setAddSessionStep(1);
+      document.getElementById('add-session-modal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('add-session-phone')?.focus(), 100);
+    }
+
+    function closeAddSessionModal() {
+      if (addSessionState.loginId) {
+        // Cancel in background so temporary session file doesn't linger
+        fetch('/api/sessions/login/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ login_id: addSessionState.loginId })
+        }).catch(() => {});
+      }
+      if (addSessionState.timerInterval) {
+        clearInterval(addSessionState.timerInterval);
+        addSessionState.timerInterval = null;
+      }
+      addSessionState.loginId = null;
+      document.getElementById('add-session-modal').classList.add('hidden');
+    }
+
+    function setAddSessionStep(step) {
+      document.getElementById('add-session-step-1')?.classList.toggle('hidden', step !== 1);
+      document.getElementById('add-session-step-2')?.classList.toggle('hidden', step !== 2);
+      document.getElementById('add-session-step-3')?.classList.toggle('hidden', step !== 3);
+      document.getElementById('add-session-step-4')?.classList.toggle('hidden', step !== 4);
+
+      // Stepper highlight
+      const s1 = document.getElementById('add-session-stepper-1');
+      const s2 = document.getElementById('add-session-stepper-2');
+      const s3 = document.getElementById('add-session-stepper-3');
+
+      if (s1 && s2 && s3) {
+        if (step === 1) {
+          s1.className = 'flex items-center gap-1.5 font-bold text-emerald-400';
+          s2.className = 'flex items-center gap-1.5 font-semibold text-slate-500';
+          s3.className = 'flex items-center gap-1.5 font-semibold text-slate-500';
+        } else if (step === 2) {
+          s1.className = 'flex items-center gap-1.5 font-semibold text-slate-400';
+          s2.className = 'flex items-center gap-1.5 font-bold text-indigo-400';
+          s3.className = 'flex items-center gap-1.5 font-semibold text-slate-500';
+        } else if (step === 3) {
+          s1.className = 'flex items-center gap-1.5 font-semibold text-slate-400';
+          s2.className = 'flex items-center gap-1.5 font-semibold text-slate-400';
+          s3.className = 'flex items-center gap-1.5 font-bold text-amber-400';
+        } else if (step === 4) {
+          s1.className = 'flex items-center gap-1.5 font-semibold text-slate-400';
+          s2.className = 'flex items-center gap-1.5 font-semibold text-slate-400';
+          s3.className = 'flex items-center gap-1.5 font-bold text-emerald-400';
+        }
+      }
+    }
+
+    function setAddSessionAlert(msg, type = 'error') {
+      const el = document.getElementById('add-session-alert');
+      if (!el) return;
+      if (!msg) {
+        el.className = 'hidden';
+        el.innerHTML = '';
+        return;
+      }
+      if (type === 'error') {
+        el.className = 'p-3 rounded-xl text-xs flex items-start gap-2 bg-rose-950/60 border border-rose-500/40 text-rose-300';
+        el.innerHTML = `<i class="ph-bold ph-warning-circle text-base shrink-0 mt-0.5"></i><span>${escapeHtml(msg)}</span>`;
+      } else if (type === 'info') {
+        el.className = 'p-3 rounded-xl text-xs flex items-start gap-2 bg-sky-950/60 border border-sky-500/40 text-sky-300';
+        el.innerHTML = `<i class="ph-bold ph-info text-base shrink-0 mt-0.5"></i><span>${escapeHtml(msg)}</span>`;
+      } else if (type === 'success') {
+        el.className = 'p-3 rounded-xl text-xs flex items-start gap-2 bg-emerald-950/60 border border-emerald-500/40 text-emerald-300';
+        el.innerHTML = `<i class="ph-bold ph-check-circle text-base shrink-0 mt-0.5"></i><span>${escapeHtml(msg)}</span>`;
+      }
+    }
+
+    async function submitAddSessionPhone() {
+      const phoneInput = document.getElementById('add-session-phone');
+      const categoryInput = document.getElementById('add-session-category');
+      const remarkInput = document.getElementById('add-session-remark');
+      const proxyInput = document.getElementById('add-session-proxy');
+      const btn = document.getElementById('btn-add-session-send-code');
+
+      const phone = (phoneInput?.value || '').trim();
+      if (!phone) {
+        setAddSessionAlert('لطفاً شماره تلفن را وارد فرمایید.');
+        phoneInput?.focus();
+        return;
+      }
+
+      setAddSessionAlert(null);
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="ph-bold ph-spinner animate-spin"></i><span>در حال اتصال و ارسال کد...</span>`;
+      }
+
+      try {
+        const res = await fetch('/api/sessions/login/send-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: phone,
+            category: categoryInput?.value.trim() || null,
+            remark: remarkInput?.value.trim() || null,
+            proxy: proxyInput?.value.trim() || null
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || 'خطا در ارسال کد تلگرام');
+        }
+
+        addSessionState.loginId = data.login_id;
+        addSessionState.phone = data.phone;
+
+        const badgeEl = document.getElementById('add-session-target-phone-badge');
+        if (badgeEl) badgeEl.innerText = data.phone;
+        const hintEl = document.getElementById('add-session-delivery-hint');
+        if (hintEl && data.delivery_type) {
+          hintEl.innerText = `کد تأیید به ${data.delivery_type} ارسال گردید.`;
+        }
+
+        // Start countdown timer
+        startAddSessionCountdown(data.timeout || 120);
+
+        setAddSessionStep(2);
+        setTimeout(() => document.getElementById('add-session-code')?.focus(), 150);
+
+      } catch (err) {
+        setAddSessionAlert(err.message || 'خطا در ارسال کد');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = `<i class="ph-bold ph-paper-plane-tilt"></i><span>دریافت کد تلگرام</span>`;
+        }
+      }
+    }
+
+    function startAddSessionCountdown(seconds) {
+      if (addSessionState.timerInterval) {
+        clearInterval(addSessionState.timerInterval);
+      }
+      addSessionState.timerSeconds = seconds;
+      const timerEl = document.getElementById('add-session-timer');
+      const resendBtn = document.getElementById('btn-add-session-resend');
+      const timerWrap = document.getElementById('add-session-timer-wrap');
+
+      if (resendBtn) resendBtn.classList.add('hidden');
+      if (timerWrap) timerWrap.classList.remove('hidden');
+
+      const updateDisplay = () => {
+        if (!timerEl) return;
+        const mins = Math.floor(addSessionState.timerSeconds / 60);
+        const secs = addSessionState.timerSeconds % 60;
+        timerEl.innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      };
+      updateDisplay();
+
+      addSessionState.timerInterval = setInterval(() => {
+        addSessionState.timerSeconds--;
+        if (addSessionState.timerSeconds <= 0) {
+          clearInterval(addSessionState.timerInterval);
+          addSessionState.timerInterval = null;
+          if (timerWrap) timerWrap.classList.add('hidden');
+          if (resendBtn) resendBtn.classList.remove('hidden');
+        } else {
+          updateDisplay();
+        }
+      }, 1000);
+    }
+
+    async function resendAddSessionCode() {
+      if (!addSessionState.loginId) return;
+      const resendBtn = document.getElementById('btn-add-session-resend');
+      if (resendBtn) {
+        resendBtn.disabled = true;
+        resendBtn.innerHTML = `<i class="ph-bold ph-spinner animate-spin"></i> در حال ارسال...`;
+      }
+
+      try {
+        const res = await fetch('/api/sessions/login/resend-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ login_id: addSessionState.loginId })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'خطا در ارسال مجدد');
+
+        setAddSessionAlert('کد جدید با موفقیت ارسال شد.', 'info');
+        startAddSessionCountdown(data.timeout || 120);
+      } catch (e) {
+        setAddSessionAlert(e.message || 'خطا در ارسال مجدد کد');
+      } finally {
+        if (resendBtn) {
+          resendBtn.disabled = false;
+          resendBtn.innerHTML = `<i class="ph-bold ph-arrow-counter-clockwise"></i> ارسال مجدد کد`;
+        }
+      }
+    }
+
+    async function submitAddSessionCode() {
+      const codeInput = document.getElementById('add-session-code');
+      const btn = document.getElementById('btn-add-session-verify-code');
+      const code = (codeInput?.value || '').trim();
+
+      if (!code) {
+        setAddSessionAlert('لطفاً کد ۵ رقمی دریافتی را وارد فرمایید.');
+        codeInput?.focus();
+        return;
+      }
+
+      setAddSessionAlert(null);
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="ph-bold ph-spinner animate-spin"></i><span>در حال بررسی کد...</span>`;
+      }
+
+      try {
+        const res = await fetch('/api/sessions/login/verify-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            login_id: addSessionState.loginId,
+            code: code
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || 'کد وارد شده صحیح نمی‌باشد.');
+        }
+
+        if (data.status === '2fa_required') {
+          setAddSessionStep(3);
+          setTimeout(() => document.getElementById('add-session-password')?.focus(), 150);
+        } else if (data.status === 'success') {
+          showAddSessionSuccess(data);
+        }
+      } catch (err) {
+        setAddSessionAlert(err.message || 'خطا در تأیید کد');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = `<i class="ph-bold ph-check"></i><span>تأیید کد و ورود</span>`;
+        }
+      }
+    }
+
+    async function submitAddSessionPassword() {
+      const pwdInput = document.getElementById('add-session-password');
+      const saveCheck = document.getElementById('add-session-save-password');
+      const btn = document.getElementById('btn-add-session-verify-password');
+      const pwd = (pwdInput?.value || '').trim();
+
+      if (!pwd) {
+        setAddSessionAlert('لطفاً گذرواژه دومرحله‌ای (2FA) را وارد نمایید.');
+        pwdInput?.focus();
+        return;
+      }
+
+      setAddSessionAlert(null);
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="ph-bold ph-spinner animate-spin"></i><span>در حال تأیید رمز و ذخیره سشن...</span>`;
+      }
+
+      try {
+        const res = await fetch('/api/sessions/login/verify-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            login_id: addSessionState.loginId,
+            password: pwd,
+            save_password: saveCheck ? saveCheck.checked : true
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || 'گذرواژه دومرحله‌ای نادرست است.');
+        }
+
+        if (data.status === 'success') {
+          showAddSessionSuccess(data);
+        }
+      } catch (err) {
+        setAddSessionAlert(err.message || 'خطا در تأیید رمز');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = `<i class="ph-bold ph-lock-key-open"></i><span>تأیید رمز و ثبت سشن</span>`;
+        }
+      }
+    }
+
+    function showAddSessionSuccess(data) {
+      if (addSessionState.timerInterval) {
+        clearInterval(addSessionState.timerInterval);
+        addSessionState.timerInterval = null;
+      }
+      setAddSessionAlert(null);
+      setAddSessionStep(4);
+
+      const nameEl = document.getElementById('add-session-res-name');
+      if (nameEl) nameEl.innerText = data.display_name || data.first_name || '-';
+      const phEl = document.getElementById('add-session-res-phone');
+      if (phEl) phEl.innerText = data.phone || '-';
+      const idEl = document.getElementById('add-session-res-id');
+      if (idEl) idEl.innerText = data.user_id ? String(data.user_id) : '-';
+      const userEl = document.getElementById('add-session-res-username');
+      if (userEl) userEl.innerText = data.username ? `@${data.username}` : '(بدون یوزرنیم)';
+
+      // Refresh list in background
+      loadSourceSessions();
+      loadStats();
+      loadCategories();
+    }
+
+    function finishAddSessionModal() {
+      closeAddSessionModal();
+      loadSourceSessions();
+      loadStats();
+    }
+
+    function cancelAddSession() {
+      if (confirm('آیا از انصراف و لغو این فرآیند ورود مطمئن هستید؟')) {
+        closeAddSessionModal();
+      }
+    }
+
+    function toggleAddSessionPasswordVisibility() {
+      const input = document.getElementById('add-session-password');
+      const icon = document.getElementById('add-session-eye-icon');
+      if (!input || !icon) return;
+      if (input.type === 'password') {
+        input.type = 'text';
+        icon.className = 'ph-bold ph-eye-slash';
+      } else {
+        input.type = 'password';
+        icon.className = 'ph-bold ph-eye';
+      }
+    }
+
+    // Attach Enter key shortcuts for modal
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('add-session-phone')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          submitAddSessionPhone();
+        }
+      });
+      document.getElementById('add-session-code')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          submitAddSessionCode();
+        }
+      });
+      document.getElementById('add-session-password')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          submitAddSessionPassword();
+        }
+      });
     });
 
     // Initialize on load
