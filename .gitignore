@@ -12,6 +12,7 @@ ENV/
 *.session-journal
 storage/source_sessions/*
 storage/target_sessions/*
+storage/temp_sessions/*
 storage/passwords.json
 storage/proxies.json
 storage/target_sessions_metadata.json
@@ -20,6 +21,7 @@ storage/*.csv
 storage/active_port.txt
 !storage/source_sessions/.gitkeep
 !storage/target_sessions/.gitkeep
+PANEL_CREDENTIALS.txt
 
 # Session archives and extracted data
 sessions/

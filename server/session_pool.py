@@ -290,6 +290,24 @@ class TelethonSessionPool(ISessionPool):
             sessions.append(s)
         return sessions
 
+    async def add_session(self, session_path: Path) -> dict:
+        """
+        Dynamically initializes and registers a newly added session file
+        into the active pool without needing a full reload.
+        """
+        async with self._lock:
+            session_name = session_path.stem
+            await self._init_single_session(session_path, session_name)
+            info = dict(self._session_info.get(session_name, {}))
+            if self.metadata_service:
+                meta = self.metadata_service.get_source_metadata(info.get("phone") or session_name)
+                info["category"] = meta.get("category", "")
+                info["remark"] = meta.get("remark", "")
+            else:
+                info["category"] = ""
+                info["remark"] = ""
+            return info
+
     async def reload(self) -> None:
         """Reload sessions from directory."""
         await self.stop()
