@@ -178,4 +178,25 @@ def test_migrate_provide_and_skip_2fa_endpoints():
     client.delete("/api/accounts/passwords/+989999999999")
 
 
+def test_login_api_invalid_requests():
+    # Invalid phone format
+    res = client.post("/api/sessions/login/send-code", json={"phone": "123"})
+    assert res.status_code == 400
+    assert "نامعتبر" in res.json()["detail"]
+
+    # Unknown login_id for verify-code
+    res = client.post("/api/sessions/login/verify-code", json={"login_id": "nonexistent_id", "code": "12345"})
+    assert res.status_code == 404
+
+    # Unknown login_id for verify-password
+    res = client.post("/api/sessions/login/verify-password", json={"login_id": "nonexistent_id", "password": "pass"})
+    assert res.status_code == 404
+
+    # Cancel nonexistent login_id
+    res = client.post("/api/sessions/login/cancel", json={"login_id": "nonexistent_id"})
+    assert res.status_code == 200
+    assert res.json()["status"] == "not_found"
+
+
+
 

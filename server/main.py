@@ -19,6 +19,7 @@ from core.exceptions import OTPNotFoundError, SessionNotFoundError
 from core.telethon_patch import apply_telethon_patches
 from server.account_service import AccountManagementService
 from server.chat_service import ChatService
+from server.login_service import TelegramLoginService
 from server.metadata_service import MetadataService
 from server.migration_manager import MigrationJobManager
 from server.otp_service import TelethonOTPService
@@ -42,6 +43,13 @@ migration_manager = MigrationJobManager(settings, otp_service, metadata_service)
 account_service = AccountManagementService(pool, settings)
 proxy_service = ProxyService(settings)
 chat_service = ChatService(pool)
+login_service = TelegramLoginService(
+    settings=settings,
+    pool=pool,
+    account_service=account_service,
+    metadata_service=metadata_service,
+    proxy_service=proxy_service
+)
 
 
 @asynccontextmanager
@@ -53,6 +61,7 @@ async def lifespan(app: FastAPI):
     logger.info("Stopping Master Telegram Session Manager...")
     if not pool_startup_task.done():
         pool_startup_task.cancel()
+    await login_service.stop()
     await migration_manager.stop()
     await pool.stop()
 
@@ -185,6 +194,32 @@ class BatchNamesRequest(BaseModel):
 
 class AccountActionRequest(BaseModel):
     identifier: str
+
+
+class LoginSendCodeRequest(BaseModel):
+    phone: str
+    category: Optional[str] = None
+    remark: Optional[str] = None
+    proxy: Optional[str] = None
+
+
+class LoginVerifyCodeRequest(BaseModel):
+    login_id: str
+    code: str
+
+
+class LoginVerifyPasswordRequest(BaseModel):
+    login_id: str
+    password: str
+    save_password: bool = True
+
+
+class LoginResendCodeRequest(BaseModel):
+    login_id: str
+
+
+class LoginCancelRequest(BaseModel):
+    login_id: str
 
 
 # ==========================================
@@ -361,6 +396,46 @@ async def upload_sessions(
         "csv_passwords_imported": csv_count,
         "total_active": len(pool.list_sessions())
     }
+
+
+# ==========================================
+# Direct Phone Login & Session Creation API
+# ==========================================
+@app.post("/api/sessions/login/send-code", summary="Request Telegram OTP code for adding a session directly")
+async def login_send_code(req: LoginSendCodeRequest):
+    return await login_service.start_login(
+        phone=req.phone,
+        category=req.category,
+        remark=req.remark,
+        proxy=req.proxy
+    )
+
+
+@app.post("/api/sessions/login/verify-code", summary="Verify Telegram OTP code to complete or advance login")
+async def login_verify_code(req: LoginVerifyCodeRequest):
+    return await login_service.verify_code(
+        login_id=req.login_id,
+        code=req.code
+    )
+
+
+@app.post("/api/sessions/login/verify-password", summary="Verify 2FA password to complete session creation")
+async def login_verify_password(req: LoginVerifyPasswordRequest):
+    return await login_service.verify_password(
+        login_id=req.login_id,
+        password=req.password,
+        save_password=req.save_password
+    )
+
+
+@app.post("/api/sessions/login/resend-code", summary="Resend Telegram OTP code")
+async def login_resend_code(req: LoginResendCodeRequest):
+    return await login_service.resend_code(login_id=req.login_id)
+
+
+@app.post("/api/sessions/login/cancel", summary="Cancel pending login session and cleanup temporary files")
+async def login_cancel(req: LoginCancelRequest):
+    return await login_service.cancel_login(login_id=req.login_id)
 
 
 @app.delete("/api/sessions/source-all", summary="Delete all source session files")
