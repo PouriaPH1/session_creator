@@ -607,6 +607,109 @@
     </div>
   </div>
 
+  <!-- Active Sessions & 24h Security Management Modal -->
+  <div id="active-sessions-modal" class="fixed inset-0 bg-black/75 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass rounded-2xl max-w-2xl w-full p-6 space-y-4 border border-purple-500/40 shadow-2xl animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
+            <i class="ph-bold ph-shield-check text-xl"></i>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              مدیریت نشست‌های فعال تلگرام و امنیت ۲۴ ساعته
+            </h3>
+            <div class="text-[11px] text-slate-400 flex items-center gap-2">
+              <span>اکانت:</span>
+              <span id="active-sessions-phone" class="font-mono text-purple-300 font-bold"></span>
+            </div>
+          </div>
+        </div>
+        <button onclick="closeActiveSessionsModal()" class="text-slate-400 hover:text-white transition p-1 rounded-lg hover:bg-slate-800">
+          <i class="ph-bold ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body (Scrollable) -->
+      <div class="space-y-4 overflow-y-auto pr-1 flex-1 text-xs">
+        
+        <!-- Loading State -->
+        <div id="active-sessions-loading" class="py-12 text-center space-y-3">
+          <i class="ph-bold ph-spinner animate-spin text-3xl text-purple-400"></i>
+          <p class="text-slate-400">در حال دریافت لیست نشست‌های فعال تلگرام و وضعیت ۲۴ ساعته...</p>
+        </div>
+
+        <!-- Main Content Area -->
+        <div id="active-sessions-content" class="space-y-4 hidden">
+          
+          <!-- 24-Hour Telegram Policy Banner -->
+          <div id="security-24h-banner" class="rounded-xl transition-all">
+            <!-- Dynamic banner injected via JS -->
+          </div>
+
+          <!-- Auto-Terminate Schedule Card -->
+          <div class="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition">
+            <div class="space-y-0.5 max-w-[80%]">
+              <div class="font-bold text-slate-200 flex items-center gap-1.5">
+                <i class="ph-bold ph-clock-countdown text-indigo-400"></i>
+                لغو خودکار پس از پایان ۲۴ ساعت (Auto-Terminate)
+              </div>
+              <div class="text-[11px] text-slate-400">
+                به محض سپری شدن ۲۴ ساعت، سیستم در پس‌زمینه تمام نشست‌های قبلی/فروشنده را به صورت خودکار حذف می‌کند و فقط سشن‌های سشن‌منیجر حفظ می‌شوند.
+              </div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="toggle-schedule-terminate" onchange="toggleScheduleAutoTerminate()" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+            </label>
+          </div>
+
+          <!-- Active Sessions List Header & Stats -->
+          <div class="flex items-center justify-between pt-1">
+            <div class="font-bold text-slate-300 flex items-center gap-1.5">
+              <i class="ph-bold ph-devices text-sky-400"></i>
+              نشست‌های فعال روی اکانت تلگرام
+            </div>
+            <div class="flex items-center gap-2 text-[10px]">
+              <span class="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold" id="badge-our-sessions-count">
+                سشن‌های خودمان: ۰
+              </span>
+              <span class="px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-300 border border-rose-500/30 font-bold" id="badge-foreign-sessions-count">
+                نشست‌های قبلی/غریبه: ۰
+              </span>
+            </div>
+          </div>
+
+          <!-- Sessions List Cards Container -->
+          <div id="active-sessions-cards" class="space-y-2">
+            <!-- Rendered by JS -->
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Modal Footer Actions -->
+      <div id="active-sessions-footer" class="border-t border-slate-800 pt-3 flex items-center justify-between gap-3 shrink-0 hidden">
+        <button onclick="closeActiveSessionsModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition">
+          بستن
+        </button>
+
+        <div class="flex items-center gap-2">
+          <button id="btn-refresh-sessions" onclick="loadAccountAuthorizations(currentActiveSessionsId)" class="p-2 rounded-xl text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 transition" title="بروزرسانی لیست نشست‌ها">
+            <i class="ph-bold ph-arrow-clockwise"></i>
+          </button>
+          <div id="btn-terminate-all-container">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- Profile Edit & Avatar Modal -->
   <div id="profile-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="glass rounded-2xl max-w-md w-full p-6 space-y-4 border border-indigo-500/40 animate-in fade-in zoom-in-95 duration-200">
@@ -1707,11 +1810,11 @@
                     <!-- Security group -->
                     <div class="px-3 py-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-widest border-t border-b border-slate-700/50">امنیت</div>
 
-                    <button onclick="closeAllDropdowns(); terminateSessions('${item.phone}')"
+                    <button onclick="closeAllDropdowns(); openActiveSessionsModal('${item.phone}')"
                             ${disabledAttr}
                             class="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700/50 hover:text-white transition ${disabledClass}">
-                      <i class="ph-bold ph-shield-slash text-purple-400 text-sm w-4"></i>
-                      پایان سایر نشست‌ها
+                      <i class="ph-bold ph-shield-check text-purple-400 text-sm w-4"></i>
+                      نشست‌های فعال و امنیت (۲۴h)
                     </button>
 
                     <button onclick="closeAllDropdowns(); checkSpamBot('${item.phone}')"
@@ -1915,6 +2018,9 @@
               </div>
             </div>
             <div class="flex items-center gap-1 shrink-0">
+              <button onclick="openActiveSessionsModal('${escapeHtml(item.phone || item.filename)}')" title="نشست‌های فعال و امنیت ۲۴h" class="p-1.5 rounded-lg bg-purple-600/15 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 transition flex items-center justify-center">
+                <i class="ph-bold ph-shield-check text-xs"></i>
+              </button>
               <button onclick="openEditMetadataModal('target', '${escapeHtml(item.filename)}', '${escapeHtml(item.category || '')}', '${escapeHtml(item.remark || '')}')" title="ویرایش دسته‌بندی و ریمارک" class="p-1.5 rounded-lg bg-indigo-600/15 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition flex items-center justify-center">
                 <i class="ph-bold ph-pencil-simple text-xs"></i>
               </button>
@@ -2690,27 +2796,309 @@
     // =======================================================
     // Advanced Account Management
     // =======================================================
-    async function terminateSessions(identifier) {
-      if (!confirm(`آیا مطمئن هستید که می‌خواهید تمام نشست‌های دیگر اکانت ${identifier} را لغو کنید؟`)) return;
+    // =======================================================
+    // Active Sessions & 24h Security Management
+    // =======================================================
+    let currentActiveSessionsId = null;
+    let currentAuthData = null;
+
+    function openActiveSessionsModal(identifier) {
+      if (!identifier) return;
+      currentActiveSessionsId = identifier;
+      document.getElementById('active-sessions-phone').innerText = identifier;
+      document.getElementById('active-sessions-modal').classList.remove('hidden');
+      document.getElementById('active-sessions-loading').classList.remove('hidden');
+      document.getElementById('active-sessions-content').classList.add('hidden');
+      document.getElementById('active-sessions-footer').classList.add('hidden');
+      loadAccountAuthorizations(identifier);
+    }
+
+    function closeActiveSessionsModal() {
+      document.getElementById('active-sessions-modal').classList.add('hidden');
+      currentActiveSessionsId = null;
+      currentAuthData = null;
+    }
+
+    async function loadAccountAuthorizations(identifier) {
+      if (!identifier) return;
+      document.getElementById('active-sessions-loading').classList.remove('hidden');
+      document.getElementById('active-sessions-content').classList.add('hidden');
+      document.getElementById('active-sessions-footer').classList.add('hidden');
+
+      try {
+        const res = await fetch(`/api/accounts/authorizations?identifier=${encodeURIComponent(identifier)}`);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "خطا در دریافت لیست نشست‌ها از تلگرام");
+        }
+        const data = await res.json();
+        currentAuthData = data;
+        renderActiveSessionsData(data);
+      } catch (err) {
+        alert("خطا در ارتباط با اکانت: " + err.message);
+        closeActiveSessionsModal();
+      }
+    }
+
+    function renderActiveSessionsData(data) {
+      document.getElementById('active-sessions-loading').classList.add('hidden');
+      document.getElementById('active-sessions-content').classList.remove('hidden');
+      document.getElementById('active-sessions-footer').classList.remove('hidden');
+
+      document.getElementById('active-sessions-phone').innerText = data.phone || data.identifier;
+      document.getElementById('badge-our-sessions-count').innerText = `سشن‌های خودمان: ${data.our_sessions_count}`;
+      document.getElementById('badge-foreign-sessions-count').innerText = `نشست‌های قبلی/غریبه: ${data.foreign_sessions_count}`;
+      
+      const toggle = document.getElementById('toggle-schedule-terminate');
+      if (toggle) toggle.checked = !!data.is_scheduled;
+
+      // 24h Security Banner
+      const bannerContainer = document.getElementById('security-24h-banner');
+      if (data.is_eligible) {
+        bannerContainer.innerHTML = `
+          <div class="flex items-start gap-3 bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-3.5 text-emerald-200">
+            <div class="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0 mt-0.5">
+              <i class="ph-bold ph-shield-check text-lg"></i>
+            </div>
+            <div class="space-y-1">
+              <div class="font-bold text-sm text-emerald-300">محدودیت ۲۴ ساعته سپری شده است (آماده حذف نشست‌های قبلی)</div>
+              <p class="text-xs text-emerald-300/80 leading-relaxed">
+                این سشن بیش از ۲۴ ساعت فعال بوده است. اکنون می‌توانید تمامی نشست‌های قبلی فروشنده یا اپلیکیشن‌های دیگر را حذف کنید. 
+                <strong class="text-white">سشن‌های متعلق به سشن‌منیجر محفوظ خواهند ماند.</strong>
+              </p>
+            </div>
+          </div>
+        `;
+      } else {
+        const percent = Math.min(100, Math.round((data.hours_elapsed / 24) * 100));
+        bannerContainer.innerHTML = `
+          <div class="flex items-start gap-3 bg-amber-950/40 border border-amber-500/40 rounded-xl p-3.5 text-amber-200">
+            <div class="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
+              <i class="ph-bold ph-hourglass-high text-lg animate-pulse"></i>
+            </div>
+            <div class="space-y-2 flex-1">
+              <div class="flex items-center justify-between flex-wrap gap-2">
+                <span class="font-bold text-sm text-amber-300">محدودیت امنیتی ۲۴ ساعته تلگرام فعال است</span>
+                <span class="font-mono font-bold text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-md border border-amber-500/30">
+                  ⏳ ${data.remaining_text} باقی‌مانده
+                </span>
+              </div>
+              <p class="text-xs text-amber-300/80 leading-relaxed">
+                طبق قوانین رسمی تلگرام، نشست‌های تازه ایجاد شده تا ۲۴ ساعت اجازه لغو سایر نشست‌ها را ندارند. 
+                می‌توانید کلید «لغو خودکار» را روشن کنید تا بلافاصله پس از اتمام ۲۴ ساعت، نشست‌های قبلی حذف شوند.
+              </p>
+              <div class="space-y-1 pt-1">
+                <div class="flex justify-between text-[10px] text-amber-400/80 font-mono">
+                  <span>سپری شده: ${data.hours_elapsed} ساعت</span>
+                  <span>هدف: ۲۴ ساعت</span>
+                </div>
+                <div class="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-amber-500/20">
+                  <div class="bg-gradient-to-r from-amber-500 to-yellow-400 h-2 rounded-full transition-all duration-500" style="width: ${percent}%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      // Authorizations List
+      const cardsContainer = document.getElementById('active-sessions-cards');
+      if (!data.authorizations || data.authorizations.length === 0) {
+        cardsContainer.innerHTML = `<div class="p-4 text-center text-slate-500">نشستی برای نمایش یافت نشد.</div>`;
+      } else {
+        cardsContainer.innerHTML = data.authorizations.map(a => {
+          let iconClass = 'ph-device-mobile';
+          const dev = (a.device_model || '').toLowerCase();
+          const plat = (a.platform || '').toLowerCase();
+          if (dev.includes('android') || plat.includes('android')) iconClass = 'ph-android-logo';
+          else if (dev.includes('iphone') || dev.includes('ipad') || dev.includes('apple') || plat.includes('ios')) iconClass = 'ph-apple-logo';
+          else if (dev.includes('windows') || dev.includes('pc') || plat.includes('windows')) iconClass = 'ph-windows-logo';
+          else if (dev.includes('mac') || plat.includes('macos')) iconClass = 'ph-desktop';
+
+          let badgeHtml = '';
+          if (a.is_current) {
+            badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+              <i class="ph-bold ph-star text-[9px]"></i>
+              همین سشن جاری (سشن‌منیجر)
+            </span>`;
+          } else if (a.is_our_session) {
+            badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+              <i class="ph-bold ph-shield-check text-[9px]"></i>
+              سشن سشن‌منیجر (محفوظ)
+            </span>`;
+          } else {
+            badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+              <i class="ph-bold ph-warning text-[9px]"></i>
+              نشست قبلی / فروشنده (غریبه)
+            </span>`;
+          }
+
+          let actionHtml = '';
+          if (!a.is_our_session) {
+            if (data.is_eligible) {
+              actionHtml = `
+                <button onclick="terminateSingleAuth('${a.hash}')" title="حذف این نشست" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 flex items-center gap-1 transition">
+                  <i class="ph-bold ph-trash text-xs"></i>
+                  حذف این نشست
+                </button>
+              `;
+            } else {
+              actionHtml = `
+                <span class="text-[10px] text-slate-500 bg-slate-900 px-2 py-1 rounded-lg border border-slate-800" title="پس از ۲۴ ساعت فعال می‌شود">
+                  🔒 قفل (۲۴h)
+                </span>
+              `;
+            }
+          }
+
+          const cardBorder = a.is_our_session ? 'border-slate-800 hover:border-indigo-500/30' : 'border-rose-900/30 bg-rose-950/10 hover:border-rose-800/40';
+
+          return `
+            <div class="p-3 rounded-xl bg-slate-900/60 border ${cardBorder} flex items-center justify-between gap-3 transition">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="w-8 h-8 rounded-lg ${a.is_our_session ? 'bg-indigo-500/10 text-indigo-400' : 'bg-rose-500/10 text-rose-400'} flex items-center justify-center shrink-0 text-base">
+                  <i class="ph-bold ${iconClass}"></i>
+                </div>
+                <div class="min-w-0 space-y-0.5">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-bold text-slate-200 text-xs">${escapeHtml(a.device_model || 'دستگاه ناشناس')}</span>
+                    ${badgeHtml}
+                  </div>
+                  <div class="text-[11px] text-slate-400 flex items-center gap-2 flex-wrap font-mono">
+                    <span>${escapeHtml(a.app_name || '')} ${escapeHtml(a.app_version || '')}</span>
+                    <span>•</span>
+                    <span>${escapeHtml(a.ip || '-')} (${escapeHtml(a.country || '-')})</span>
+                  </div>
+                  <div class="text-[10px] text-slate-500 flex items-center gap-2 font-mono">
+                    <span>ساخت: ${a.date_created}</span>
+                    <span>•</span>
+                    <span>آخرین فعالیت: ${a.date_active}</span>
+                  </div>
+                </div>
+              </div>
+              <div class="shrink-0">
+                ${actionHtml}
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // Footer Button
+      const btnContainer = document.getElementById('btn-terminate-all-container');
+      if (data.foreign_sessions_count === 0) {
+        btnContainer.innerHTML = `
+          <button disabled class="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed flex items-center gap-1.5">
+            <i class="ph-bold ph-check-circle text-emerald-400"></i>
+            تمامی نشست‌های غریبه حذف شده‌اند
+          </button>
+        `;
+      } else if (data.is_eligible) {
+        btnContainer.innerHTML = `
+          <button onclick="confirmTerminateAllForeign()" class="px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white shadow-lg shadow-rose-600/30 flex items-center gap-2 transition">
+            <i class="ph-bold ph-shield-slash"></i>
+            حذف تمام سشن‌های قبلی (${data.foreign_sessions_count} نشست)
+          </button>
+        `;
+      } else {
+        btnContainer.innerHTML = `
+          <button disabled class="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed flex items-center gap-2" title="پس از اتمام ۲۴ ساعت فعال خواهد شد">
+            <i class="ph-bold ph-lock"></i>
+            حذف سشن‌های قبلی (${data.remaining_text} مانده)
+          </button>
+        `;
+      }
+    }
+
+    async function confirmTerminateAllForeign() {
+      if (!currentAuthData || !currentActiveSessionsId) return;
+      if (!confirm(`⚠️ تأیید حذف نشست‌های قبلی:\nآیا مطمئن هستید که می‌خواهید تمام ${currentAuthData.foreign_sessions_count} نشست قبلی/غریبه این اکانت را لغو کنید؟\n\n✅ نکته: فقط سشن‌های فعال متعلق به سشن‌منیجر حفظ خواهند شد.`)) return;
+
+      try {
+        const btnContainer = document.getElementById('btn-terminate-all-container');
+        if (btnContainer) {
+          btnContainer.innerHTML = `<div class="px-4 py-2 text-xs font-bold text-slate-300 flex items-center gap-2"><i class="ph-bold ph-spinner animate-spin"></i> در حال حذف نشست‌ها...</div>`;
+        }
+
+        const res = await fetch('/api/accounts/terminate-sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: currentActiveSessionsId })
+        });
+        const result = await res.json();
+        if (res.ok && result.status === 'success') {
+          alert(`✅ ${result.message}`);
+          await loadAccountAuthorizations(currentActiveSessionsId);
+        } else if (result.status === 'forbidden') {
+          alert(`⏳ ${result.message}`);
+          await loadAccountAuthorizations(currentActiveSessionsId);
+        } else {
+          alert(`خطا: ${result.message || 'عملیات ناموفق بود'}`);
+          await loadAccountAuthorizations(currentActiveSessionsId);
+        }
+      } catch (err) {
+        alert("خطا در ارتباط با سرور: " + err.message);
+        await loadAccountAuthorizations(currentActiveSessionsId);
+      }
+    }
+
+    async function terminateSingleAuth(hashStr) {
+      if (!currentActiveSessionsId || !hashStr) return;
+      if (!confirm("آیا از لغو این نشست اطمینان دارید؟")) return;
 
       try {
         const res = await fetch('/api/accounts/terminate-sessions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: identifier })
+          body: JSON.stringify({
+            identifier: currentActiveSessionsId,
+            target_hash: hashStr
+          })
         });
-        const data = await res.json();
-        if (data.status === 'success') {
-          alert("تمام نشست‌های دیگر این اکانت با موفقیت بسته شدند.");
-        } else if (data.status === 'forbidden') {
-          alert("توجه: طبق قوانین امنیتی تلگرام، برای بستن سایر نشست‌ها باید حداقل ۲۴ ساعت از لاگین این سشن گذشته باشد.");
+        const result = await res.json();
+        if (res.ok && result.status === 'success') {
+          alert("✅ نشست مورد نظر با موفقیت حذف شد.");
+          await loadAccountAuthorizations(currentActiveSessionsId);
+        } else if (result.status === 'forbidden') {
+          alert(`⏳ ${result.message}`);
         } else {
-          alert("خطا: " + data.message);
+          alert(`خطا: ${result.message || 'عملیات ناموفق بود'}`);
         }
-      } catch (e) {
-        alert("خطا: " + e);
+      } catch (err) {
+        alert("خطا در ارتباط: " + err.message);
       }
     }
+
+    async function toggleScheduleAutoTerminate() {
+      if (!currentActiveSessionsId) return;
+      const toggle = document.getElementById('toggle-schedule-terminate');
+      const enabled = toggle.checked;
+
+      try {
+        const res = await fetch('/api/accounts/schedule-terminate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            identifier: currentActiveSessionsId,
+            enable: enabled
+          })
+        });
+        const result = await res.json();
+        if (enabled) {
+          alert("✅ زمان‌بندی لغو خودکار فعال شد. به محض پایان ۲۴ ساعت، نشست‌های قبلی به طور خودکار حذف خواهند شد.");
+        } else {
+          alert("لغو خودکار غیرفعال شد.");
+        }
+      } catch (err) {
+        alert("خطا در ثبت زمان‌بندی: " + err.message);
+        toggle.checked = !enabled;
+      }
+    }
+
+    async function terminateSessions(identifier) {
+      openActiveSessionsModal(identifier);
+    }
+
 
     async function checkSpamBot(identifier) {
       try {
