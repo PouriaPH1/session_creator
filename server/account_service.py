@@ -8,6 +8,7 @@ from pathlib import Path
 import random
 import secrets
 import string
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from telethon import TelegramClient
@@ -20,7 +21,6 @@ from telethon.tl.functions.account import (
     ResetAuthorizationRequest,
     UpdateProfileRequest
 )
-from telethon.tl.functions.auth import ResetAuthorizationsRequest
 from telethon.tl.functions.photos import UploadProfilePhotoRequest
 from telethon.tl.types.account import Authorizations
 
@@ -71,16 +71,12 @@ class AccountManagementService:
         self.pool = pool
         self.settings = settings
         self.passwords_file = self.settings.base_dir / "storage" / "passwords.json"
-        self.scheduled_file = self.settings.base_dir / "storage" / "scheduled_terminations.json"
-        self._ephemeral_clients: Dict[str, TelegramClient] = {}
         self._ensure_storage()
 
     def _ensure_storage(self) -> None:
         self.passwords_file.parent.mkdir(parents=True, exist_ok=True)
         if not self.passwords_file.exists():
             self.passwords_file.write_text("{}", encoding="utf-8")
-        if not self.scheduled_file.exists():
-            self.scheduled_file.write_text("{}", encoding="utf-8")
 
     def _load_passwords(self) -> Dict[str, Dict[str, Any]]:
         try:
@@ -427,72 +423,72 @@ class AccountManagementService:
         return results
 
     # ==========================================
-    # Active Sessions, 24h Security & Auto-Termination
+    # Active Sessions & 24h Security (manual actions only)
     # ==========================================
-    def _find_session_path(self, identifier: str) -> Optional[Path]:
-        """Finds .session file for an identifier in source or target directory."""
+    # NOTE: there is intentionally NO background/scheduled auto-termination.
+    # Revoking authorizations is irreversible, so it only ever runs when the
+    # operator explicitly presses the button in the panel.
+
+    @staticmethod
+    def _digits(value: Optional[str]) -> str:
+        return "".join(c for c in str(value or "") if c.isdigit())
+
+    @staticmethod
+    def _id_variants(identifier: str) -> List[str]:
         clean = identifier.strip().replace(" ", "")
-        candidates = [clean, clean.lstrip("+"), f"+{clean.lstrip('+')}"]
+        if clean.endswith(".session"):
+            clean = clean[:-8]
+        bare = clean.lstrip("+")
+        return list(dict.fromkeys([clean, bare, f"+{bare}"]))
 
-        # Check source_sessions
-        for c in candidates:
-            p = self.settings.source_sessions_dir / f"{c}.session"
-            if p.exists() and p.stat().st_size > 0:
-                return p
-            p_raw = self.settings.source_sessions_dir / c
-            if p_raw.exists() and p_raw.is_file() and p_raw.stat().st_size > 0:
-                return p_raw
+    def _find_session_path(self, identifier: str, kind: str = "auto") -> Optional[Path]:
+        """
+        Finds a .session file for an identifier.
+        kind: "source" -> only source_sessions, "target" -> only target_sessions,
+              "auto" -> source first, then target.
+        """
+        dirs: List[Path] = []
+        if kind in ("auto", "source"):
+            dirs.append(self.settings.source_sessions_dir)
+        if kind in ("auto", "target"):
+            dirs.append(self.settings.target_sessions_dir)
 
-        # Check target_sessions
-        for c in candidates:
-            p = self.settings.target_sessions_dir / f"{c}.session"
-            if p.exists() and p.stat().st_size > 0:
-                return p
-            p_raw = self.settings.target_sessions_dir / c
-            if p_raw.exists() and p_raw.is_file() and p_raw.stat().st_size > 0:
-                return p_raw
-
+        raw = identifier.strip().replace(" ", "")
+        for d in dirs:
+            exact = d / raw
+            if raw.endswith(".session") and exact.is_file() and exact.stat().st_size > 0:
+                return exact
+            for c in self._id_variants(identifier):
+                p = d / f"{c}.session"
+                if p.is_file() and p.stat().st_size > 0:
+                    return p
         return None
 
-    async def get_client_safely(self, identifier: str) -> TelegramClient:
-        """
-        Retrieves a connected TelegramClient for an identifier.
-        Checks active pool first, then scans storage (source & target).
-        """
-        client = self.pool.get_client(identifier)
-        if client:
-            if not client.is_connected():
-                await client.connect()
-            return client
+    def _load_target_meta(self) -> Dict[str, Any]:
+        meta_file = self.settings.base_dir / "storage" / "target_sessions_metadata.json"
+        if meta_file.exists():
+            try:
+                return json.loads(meta_file.read_text(encoding="utf-8")) or {}
+            except Exception:
+                return {}
+        return {}
 
-        clean_id = identifier.strip().replace(" ", "")
-        if clean_id in self._ephemeral_clients:
-            c = self._ephemeral_clients[clean_id]
-            if not c.is_connected():
-                await c.connect()
-            return c
-
-        session_path = self._find_session_path(identifier)
-        if not session_path:
-            raise SessionNotFoundError(f"Session '{identifier}' not found in pool or storage.")
-
+    def _build_file_client(self, session_path: Path) -> TelegramClient:
+        """Builds a short-lived client for a session file that is not in the pool."""
         from core.device_profiler import DeviceProfileFactory
         profile = DeviceProfileFactory.get_deterministic_profile(session_path.stem)
 
+        # Reuse the exact proxy the session was created with, so the account is
+        # never seen from a new/different IP.
         proxy_dict = None
-        target_meta_file = self.settings.base_dir / "storage" / "target_sessions_metadata.json"
-        if target_meta_file.exists():
-            try:
-                target_meta = json.loads(target_meta_file.read_text(encoding="utf-8"))
-                item_meta = target_meta.get(session_path.name, {}) or target_meta.get(session_path.stem, {})
-                proxy_url = item_meta.get("proxy_url")
-                if proxy_url:
-                    from server.proxy_service import parse_telethon_proxy
-                    proxy_dict = parse_telethon_proxy(proxy_url)
-            except Exception:
-                pass
+        meta = self._load_target_meta()
+        item_meta = meta.get(session_path.name) or meta.get(session_path.stem) or {}
+        proxy_url = item_meta.get("proxy_url") if isinstance(item_meta, dict) else None
+        if proxy_url:
+            from server.proxy_service import parse_telethon_proxy
+            proxy_dict = parse_telethon_proxy(proxy_url)
 
-        new_client = TelegramClient(
+        return TelegramClient(
             str(session_path),
             api_id=self.settings.api_id,
             api_hash=self.settings.api_hash,
@@ -503,40 +499,106 @@ class AccountManagementService:
             system_lang_code=profile.system_lang_code,
             proxy=proxy_dict
         )
-        await new_client.connect()
-        if not await new_client.is_user_authorized():
-            await new_client.disconnect()
-            raise AuthenticationFailedError(f"Session file {session_path.name} is not authorized.")
 
-        self._ephemeral_clients[clean_id] = new_client
-        self._ephemeral_clients[clean_id.lstrip("+")] = new_client
-        self._ephemeral_clients[f"+{clean_id.lstrip('+')}"] = new_client
-        return new_client
-
-    async def get_session_authorizations(self, identifier: str) -> Dict[str, Any]:
+    @asynccontextmanager
+    async def _session_client(self, identifier: str, kind: str = "auto"):
         """
-        Retrieves all active authorizations for the given session.
-        Calculates:
-        - 24-hour security countdown for the current session.
-        - Identifies our local sessions vs foreign / previous sessions.
-        - Returns structured details for display in the admin panel.
+        Yields a connected client for the requested session and restores the
+        previous connection state afterwards:
+        - pool clients are disconnected again if we were the ones who connected them
+          (keeps the pool's idle-disconnect / anti dual-IP policy intact);
+        - file clients are always disconnected and never cached.
         """
-        client = await self.get_client_safely(identifier)
-        if not client.is_connected():
-            await client.connect()
+        client: Optional[TelegramClient] = None
+        from_file = False
+        should_disconnect = False
 
+        if kind != "target":
+            client = self.pool.get_client(identifier)
+
+        if client is None:
+            session_path = self._find_session_path(identifier, kind)
+            if not session_path:
+                raise SessionNotFoundError(f"Session '{identifier}' not found in pool or storage.")
+            client = self._build_file_client(session_path)
+            from_file = True
+
+        try:
+            if not client.is_connected():
+                await client.connect()
+                should_disconnect = True
+            if from_file and not await client.is_user_authorized():
+                raise AuthenticationFailedError(f"Session '{identifier}' is not authorized.")
+            yield client
+        finally:
+            if should_disconnect or from_file:
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
+
+    def _our_profile_signatures(self, phone_digits: str, identifier: str) -> set:
+        """
+        Device signatures (device_model, system_version, app_version) of every
+        session file WE hold for this phone (source + target). Our clients always
+        connect with a deterministic profile, so these signatures identify our own
+        authorizations without having to connect any other session.
+        """
+        from core.device_profiler import DeviceProfileFactory
+
+        names = {identifier}
+        if phone_digits:
+            names.add(phone_digits)
+
+            session_info = getattr(self.pool, "_session_info", None)
+            if isinstance(session_info, dict):
+                for s_name, info in session_info.items():
+                    if isinstance(info, dict) and self._digits(info.get("phone")) == phone_digits:
+                        names.add(s_name)
+
+            for key, item in self._load_target_meta().items():
+                if isinstance(item, dict) and self._digits(item.get("phone")) == phone_digits:
+                    names.add(key)
+
+            for d in (self.settings.source_sessions_dir, self.settings.target_sessions_dir):
+                try:
+                    for f in d.glob("*.session"):
+                        if self._digits(f.stem) == phone_digits:
+                            names.add(f.stem)
+                except Exception:
+                    pass
+
+        sigs = set()
+        for n in names:
+            p = DeviceProfileFactory.get_deterministic_profile(n)
+            sigs.add((p.device_model, p.system_version, p.app_version))
+        return sigs
+
+    def _is_our_authorization(self, auth: Any, signatures: set) -> bool:
+        if bool(getattr(auth, "current", False)):
+            return True
+        sig = (
+            getattr(auth, "device_model", "") or "",
+            getattr(auth, "system_version", "") or "",
+            getattr(auth, "app_version", "") or "",
+        )
+        if sig in signatures:
+            return True
+        # Created through our own (non-official) API id -> made by this app.
+        if not bool(getattr(auth, "official_app", False)) and getattr(auth, "api_id", None) == self.settings.api_id:
+            return True
+        return False
+
+    async def _collect_authorizations(self, client: TelegramClient, identifier: str) -> Dict[str, Any]:
         try:
             res: Authorizations = await client(GetAuthorizationsRequest())
         except Exception as e:
             logger.error(f"Failed to fetch authorizations for {identifier}: {e}")
-            raise e
+            raise
 
-        # Find current authorization
         current_auth = next((a for a in res.authorizations if getattr(a, "current", False)), None)
-        if not current_auth and res.authorizations:
-            current_auth = res.authorizations[0]
 
-        # Calculate 24-hour rule based on current authorization's creation date
+        # 24-hour rule based on the current authorization's creation date
         now_utc = datetime.datetime.now(datetime.timezone.utc)
         if current_auth and getattr(current_auth, "date_created", None):
             dt_created = current_auth.date_created
@@ -544,12 +606,13 @@ class AccountManagementService:
                 dt_created = dt_created.replace(tzinfo=datetime.timezone.utc)
             elapsed_seconds = (now_utc - dt_created).total_seconds()
         else:
+            # Unknown creation date -> treat as NOT eligible (fail safe)
             dt_created = now_utc
-            elapsed_seconds = 24 * 3600
+            elapsed_seconds = 0.0
 
         hours_elapsed = max(0.0, elapsed_seconds / 3600.0)
         hours_remaining = max(0.0, 24.0 - hours_elapsed)
-        is_eligible = (elapsed_seconds >= 24 * 3600)
+        is_eligible = current_auth is not None and elapsed_seconds >= 24 * 3600
 
         remaining_h = int(hours_remaining)
         remaining_m = int((hours_remaining % 1) * 60)
@@ -558,36 +621,20 @@ class AccountManagementService:
         else:
             remaining_text = "آماده حذف نشست‌های قبلی (بیش از ۲۴ ساعت گذشته)"
 
-        # Whitelist our sessions in session manager
-        our_hashes = set()
-        if current_auth:
-            our_hashes.add(current_auth.hash)
-
-        # Check if another client for this phone exists in the pool
         try:
             me = await client.get_me()
-            clean_phone = (me.phone or "").strip().replace(" ", "") if me and me.phone else ""
+            phone_digits = self._digits(getattr(me, "phone", None))
         except Exception:
-            clean_phone = identifier.strip().replace(" ", "").lstrip("+")
+            phone_digits = ""
+        if not phone_digits:
+            phone_digits = self._digits(identifier)
 
-        if clean_phone and hasattr(self.pool, "_clients"):
-            for other_key, other_client in self.pool._clients.items():
-                if other_client is not client and other_client.is_connected():
-                    try:
-                        other_info = getattr(self.pool, "_session_info", {}).get(other_key, {})
-                        other_phone = (other_info.get("phone") or "").strip().replace(" ", "")
-                        if other_phone.lstrip("+") == clean_phone.lstrip("+"):
-                            other_res = await other_client(GetAuthorizationsRequest())
-                            for oa in other_res.authorizations:
-                                if getattr(oa, "current", False):
-                                    our_hashes.add(oa.hash)
-                    except Exception:
-                        pass
+        signatures = self._our_profile_signatures(phone_digits, identifier)
 
         auth_list = []
         for a in res.authorizations:
             is_current = bool(getattr(a, "current", False))
-            is_our_session = is_current or (a.hash in our_hashes)
+            is_our_session = self._is_our_authorization(a, signatures)
 
             created_str = a.date_created.strftime("%Y-%m-%d %H:%M:%S") if getattr(a, "date_created", None) else "-"
             active_str = a.date_active.strftime("%Y-%m-%d %H:%M:%S") if getattr(a, "date_active", None) else "-"
@@ -612,13 +659,12 @@ class AccountManagementService:
             })
 
         our_count = sum(1 for a in auth_list if a["is_our_session"])
-        foreign_count = sum(1 for a in auth_list if not a["is_our_session"])
-        is_scheduled = self.is_task_scheduled(identifier)
+        foreign_count = len(auth_list) - our_count
 
         return {
             "status": "success",
             "identifier": identifier,
-            "phone": f"+{clean_phone.lstrip('+')}" if clean_phone else identifier,
+            "phone": f"+{phone_digits}" if phone_digits else identifier,
             "is_eligible": is_eligible,
             "hours_elapsed": round(hours_elapsed, 2),
             "hours_remaining": round(hours_remaining, 2),
@@ -628,232 +674,138 @@ class AccountManagementService:
             "our_sessions_count": our_count,
             "foreign_sessions_count": foreign_count,
             "authorizations": auth_list,
-            "is_scheduled": is_scheduled
         }
+
+    async def get_session_authorizations(self, identifier: str, kind: str = "auto") -> Dict[str, Any]:
+        """Lists active authorizations + 24h status. Read-only; connection is closed afterwards."""
+        async with self._session_client(identifier, kind) as client:
+            return await self._collect_authorizations(client, identifier)
 
     async def terminate_foreign_sessions(
         self,
         identifier: str,
         target_hash: Optional[Union[int, str]] = None,
-        force: bool = False
+        kind: str = "auto"
     ) -> Dict[str, Any]:
         """
-        Safely terminates previous/foreign authorizations:
-        - Protects our own sessions in SessionManager from termination.
-        - Enforces 24-hour Telegram restriction unless force=True.
-        - Supports deleting a specific foreign authorization or all foreign authorizations at once.
+        Manually revokes previous/foreign authorizations.
+        - Never touches the current authorization or any authorization that matches
+          one of our own session files (source or target).
+        - Never uses ResetAuthorizationsRequest (it revokes ALL other sessions,
+          including our own).
+        - Requires the current session to be at least 24 hours old.
         """
-        client = await self.get_client_safely(identifier)
-        auth_data = await self.get_session_authorizations(identifier)
+        async with self._session_client(identifier, kind) as client:
+            auth_data = await self._collect_authorizations(client, identifier)
 
-        # 24-hour restriction check
-        if not auth_data["is_eligible"] and not force:
-            return {
-                "status": "forbidden",
-                "identifier": identifier,
-                "hours_remaining": auth_data["hours_remaining"],
-                "remaining_text": auth_data["remaining_text"],
-                "message": (
-                    f"طبق پروتکل امنیتی تلگرام، برای حذف نشست‌های دیگر باید حداقل ۲۴ ساعت از ساخت این سشن گذشته باشد. "
-                    f"زمان باقی‌مانده: {auth_data['remaining_text']}."
-                )
-            }
-
-        # Single target hash termination
-        if target_hash is not None:
-            t_hash = int(target_hash)
-            matching = next((a for a in auth_data["authorizations"] if a["hash_raw"] == t_hash), None)
-            if matching and matching["is_our_session"]:
+            if not auth_data["is_eligible"]:
                 return {
-                    "status": "error",
+                    "status": "forbidden",
                     "identifier": identifier,
-                    "message": "امکان حذف نشست فعال خودِ سشن‌منیجر وجود ندارد."
+                    "hours_remaining": auth_data["hours_remaining"],
+                    "remaining_text": auth_data["remaining_text"],
+                    "message": (
+                        f"طبق پروتکل امنیتی تلگرام، برای حذف نشست‌های دیگر باید حداقل ۲۴ ساعت از ساخت این سشن گذشته باشد. "
+                        f"زمان باقی‌مانده: {auth_data['remaining_text']}."
+                    )
                 }
 
-            try:
-                await client(ResetAuthorizationRequest(hash=t_hash))
-                logger.info(f"Terminated foreign authorization {t_hash} for {identifier}")
+            # Single target hash termination
+            if target_hash is not None:
+                try:
+                    t_hash = int(target_hash)
+                except (TypeError, ValueError):
+                    return {"status": "error", "identifier": identifier, "message": "شناسه نشست نامعتبر است."}
+
+                matching = next((a for a in auth_data["authorizations"] if a["hash_raw"] == t_hash), None)
+                if matching is None:
+                    return {
+                        "status": "error",
+                        "identifier": identifier,
+                        "message": "این نشست دیگر روی اکانت وجود ندارد. لیست را دوباره بارگذاری کنید."
+                    }
+                if matching["is_our_session"]:
+                    return {
+                        "status": "error",
+                        "identifier": identifier,
+                        "message": "امکان حذف نشست‌های متعلق به سشن‌منیجر وجود ندارد."
+                    }
+
+                try:
+                    await client(ResetAuthorizationRequest(hash=t_hash))
+                    logger.info(f"Terminated foreign authorization {t_hash} for {identifier}")
+                    return {
+                        "status": "success",
+                        "identifier": identifier,
+                        "target_hash": str(t_hash),
+                        "message": "نشست مورد نظر با موفقیت لغو شد."
+                    }
+                except FreshResetAuthorisationForbiddenError:
+                    return {
+                        "status": "forbidden",
+                        "identifier": identifier,
+                        "message": "تلگرام اجازه لغو این نشست را نداد (محدودیت ۲۴ ساعته هنوز برقرار است)."
+                    }
+                except Exception as e:
+                    logger.error(f"Error terminating authorization {t_hash} for {identifier}: {e}")
+                    return {"status": "error", "identifier": identifier, "message": f"خطا در لغو نشست: {e}"}
+
+            # Bulk termination: one by one, only authorizations that are NOT ours
+            foreign_auths = [a for a in auth_data["authorizations"] if not a["is_our_session"]]
+            if not foreign_auths:
                 return {
                     "status": "success",
                     "identifier": identifier,
-                    "target_hash": str(t_hash),
-                    "message": "نشست مورد نظر با موفقیت لغو شد."
-                }
-            except FreshResetAuthorisationForbiddenError:
-                return {
-                    "status": "forbidden",
-                    "identifier": identifier,
-                    "message": "تلگرام اجازه لغو این نشست را نداد (محدودیت ۲۴ ساعته هنوز برقرار است)."
-                }
-            except Exception as e:
-                logger.error(f"Error terminating authorization {t_hash} for {identifier}: {e}")
-                return {
-                    "status": "error",
-                    "identifier": identifier,
-                    "message": f"خطا در لغو نشست: {e}"
+                    "terminated_count": 0,
+                    "failed_count": 0,
+                    "preserved_count": auth_data["our_sessions_count"],
+                    "message": "هیچ نشست قبلی یا متفرقه‌ای روی این اکانت وجود ندارد. تمام سشن‌های موجود متعلق به سشن‌منیجر هستند."
                 }
 
-        # Bulk foreign termination
-        foreign_auths = [a for a in auth_data["authorizations"] if not a["is_our_session"]]
-        if not foreign_auths:
-            return {
-                "status": "success",
-                "identifier": identifier,
-                "terminated_count": 0,
-                "preserved_count": auth_data["our_sessions_count"],
-                "message": "هیچ نشست قبلی یا متفرقه‌ای روی این اکانت وجود ندارد. تمام سشن‌های موجود متعلق به سشن‌منیجر هستند."
-            }
+            terminated_count = 0
+            failed_count = 0
+            terminated_details = []
+            for fa in foreign_auths:
+                f_hash = int(fa["hash_raw"])
+                try:
+                    await client(ResetAuthorizationRequest(hash=f_hash))
+                    terminated_count += 1
+                    terminated_details.append({
+                        "device_model": fa["device_model"],
+                        "ip": fa["ip"],
+                        "country": fa["country"]
+                    })
+                except FreshResetAuthorisationForbiddenError:
+                    return {
+                        "status": "forbidden",
+                        "identifier": identifier,
+                        "terminated_count": terminated_count,
+                        "message": "تلگرام اجازه لغو سایر نشست‌ها را نداد (محدودیت ۲۴ ساعته فعال است)."
+                    }
+                except Exception as e:
+                    logger.warning(f"Failed to reset auth {f_hash} for {identifier}: {e}")
+                    failed_count += 1
 
-        terminated_count = 0
-        failed_count = 0
-        terminated_details = []
-
-        for fa in foreign_auths:
-            f_hash = int(fa["hash_raw"])
-            try:
-                await client(ResetAuthorizationRequest(hash=f_hash))
-                terminated_count += 1
-                terminated_details.append({
-                    "device_model": fa["device_model"],
-                    "ip": fa["ip"],
-                    "country": fa["country"]
-                })
-            except FreshResetAuthorisationForbiddenError:
-                return {
-                    "status": "forbidden",
-                    "identifier": identifier,
-                    "message": "تلگرام اجازه لغو سایر نشست‌ها را نداد (محدودیت ۲۴ ساعته فعال است)."
-                }
-            except Exception as e:
-                logger.warning(f"Failed to reset auth {f_hash} for {identifier}: {e}")
-                failed_count += 1
-
-        # If only 1 local session exists and some failed individually, fallback to ResetAuthorizationsRequest
-        if failed_count > 0 and auth_data["our_sessions_count"] == 1:
-            try:
-                await client(ResetAuthorizationsRequest())
-                terminated_count += failed_count
-                failed_count = 0
-            except Exception as e:
-                logger.warning(f"Fallback ResetAuthorizationsRequest failed for {identifier}: {e}")
-
-        # Mark any pending scheduled task completed
-        self.mark_task_completed(identifier, {
-            "terminated_count": terminated_count,
-            "preserved_count": auth_data["our_sessions_count"]
-        })
-
-        return {
-            "status": "success",
-            "identifier": identifier,
-            "terminated_count": terminated_count,
-            "preserved_count": auth_data["our_sessions_count"],
-            "details": terminated_details,
-            "message": (
+            msg = (
                 f"تعداد {terminated_count} نشست قبلی با موفقیت لغو شد. "
                 f"تعداد {auth_data['our_sessions_count']} سشن متعلق به سشن‌منیجر بدون تغییر حفظ شدند."
             )
-        }
+            if failed_count:
+                msg += f" ({failed_count} نشست لغو نشد.)"
+
+            return {
+                "status": "success",
+                "identifier": identifier,
+                "terminated_count": terminated_count,
+                "failed_count": failed_count,
+                "preserved_count": auth_data["our_sessions_count"],
+                "details": terminated_details,
+                "message": msg
+            }
 
     async def terminate_other_sessions(self, identifier: str) -> Dict[str, Any]:
         """Backward-compatible alias pointing to safe terminate_foreign_sessions."""
         return await self.terminate_foreign_sessions(identifier)
-
-    # ==========================================
-    # Scheduled Auto-Terminations Management
-    # ==========================================
-    def _read_scheduled(self) -> Dict[str, Any]:
-        if self.scheduled_file.exists():
-            try:
-                return json.loads(self.scheduled_file.read_text(encoding="utf-8"))
-            except Exception:
-                return {}
-        return {}
-
-    def _write_scheduled(self, data: Dict[str, Any]) -> None:
-        try:
-            self.scheduled_file.parent.mkdir(parents=True, exist_ok=True)
-            self.scheduled_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        except Exception as e:
-            logger.error(f"Error saving scheduled terminations: {e}")
-
-    def is_task_scheduled(self, identifier: str) -> bool:
-        clean = identifier.strip().replace(" ", "")
-        data = self._read_scheduled()
-        for k in [clean, clean.lstrip("+"), f"+{clean.lstrip('+')}"]:
-            if k in data and data[k].get("status") == "pending":
-                return True
-        return False
-
-    def mark_task_completed(self, identifier: str, result: Dict[str, Any]) -> None:
-        clean = identifier.strip().replace(" ", "")
-        data = self._read_scheduled()
-        changed = False
-        for k in [clean, clean.lstrip("+"), f"+{clean.lstrip('+')}"]:
-            if k in data and data[k].get("status") == "pending":
-                data[k]["status"] = "completed"
-                data[k]["completed_at"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                data[k]["result"] = result
-                changed = True
-        if changed:
-            self._write_scheduled(data)
-
-    def set_scheduled_task(self, identifier: str, enable: bool = True) -> Dict[str, Any]:
-        clean = identifier.strip().replace(" ", "")
-        canonical = f"+{clean.lstrip('+')}" if clean.lstrip("+") else clean
-        data = self._read_scheduled()
-
-        if not enable:
-            for k in [clean, clean.lstrip("+"), f"+{clean.lstrip('+')}"]:
-                data.pop(k, None)
-            self._write_scheduled(data)
-            return {"status": "cancelled", "identifier": identifier, "is_scheduled": False}
-
-        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        record = {
-            "identifier": canonical,
-            "scheduled_at": now_str,
-            "status": "pending"
-        }
-        data[canonical] = record
-        self._write_scheduled(data)
-        return {"status": "scheduled", "identifier": identifier, "is_scheduled": True, "record": record}
-
-    async def run_scheduled_auto_terminations(self) -> List[Dict[str, Any]]:
-        """Scans pending scheduled terminations and executes termination if 24h passed."""
-        data = self._read_scheduled()
-        completed_list = []
-        for ident, task in list(data.items()):
-            if task.get("status") != "pending":
-                continue
-            try:
-                auth_data = await self.get_session_authorizations(ident)
-                if auth_data.get("is_eligible"):
-                    logger.info(f"Auto-terminating foreign sessions for {ident} as 24h passed...")
-                    res = await self.terminate_foreign_sessions(ident)
-                    task["status"] = "completed"
-                    task["completed_at"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    task["result"] = res
-                    completed_list.append({"identifier": ident, "result": res})
-                    logger.info(f"Auto-termination result for {ident}: {res}")
-            except Exception as e:
-                logger.warning(f"Could not execute auto-termination check for {ident}: {e}")
-        if completed_list:
-            self._write_scheduled(data)
-        return completed_list
-
-    async def start_auto_terminator_loop(self, check_interval_seconds: int = 600) -> None:
-        """Periodic background task loop checking for eligible auto-terminations."""
-        logger.info("Auto-terminator background loop started.")
-        while True:
-            try:
-                await asyncio.sleep(check_interval_seconds)
-                await self.run_scheduled_auto_terminations()
-            except asyncio.CancelledError:
-                logger.info("Auto-terminator background loop stopped.")
-                break
-            except Exception as e:
-                logger.warning(f"Error in auto-terminator background loop: {e}")
 
     async def check_spambot(self, identifier: str) -> Dict[str, Any]:
         """Checks account limitation status via official @SpamBot."""

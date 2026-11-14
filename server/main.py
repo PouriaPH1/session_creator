@@ -6,7 +6,7 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 import re
-from typing import List, Optional, Union
+from typing import List, Literal, Optional, Union
 import urllib.parse
 import zipfile
 
@@ -57,13 +57,10 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Master Telegram Session Manager...")
     # Launch pool.start() concurrently so web server accepts requests immediately!
     pool_startup_task = asyncio.create_task(pool.start())
-    auto_terminator_task = asyncio.create_task(account_service.start_auto_terminator_loop(check_interval_seconds=600))
     yield
     logger.info("Stopping Master Telegram Session Manager...")
     if not pool_startup_task.done():
         pool_startup_task.cancel()
-    if not auto_terminator_task.done():
-        auto_terminator_task.cancel()
     await login_service.stop()
     await migration_manager.stop()
     await pool.stop()
@@ -199,16 +196,14 @@ class AccountActionRequest(BaseModel):
     identifier: str
 
 
+SessionKind = Literal["auto", "source", "target"]
+
+
 class TerminateSessionsRequest(BaseModel):
     identifier: str
     target_hash: Optional[Union[int, str]] = None
-    force: bool = False
-
-
-class ScheduleTerminateRequest(BaseModel):
-    identifier: str
-    enable: bool = True
-    identifier: str
+    # "target" = a session file in target_sessions (by filename); "auto" = pool/source first
+    kind: SessionKind = "auto"
 
 
 class LoginSendCodeRequest(BaseModel):
@@ -1220,9 +1215,12 @@ async def batch_names(req: BatchNamesRequest):
 
 
 @app.get("/api/accounts/authorizations", summary="Get active authorizations and 24-hour status")
-async def get_account_authorizations(identifier: str = Query(..., description="Phone number or session name")):
+async def get_account_authorizations(
+    identifier: str = Query(..., description="Phone number or session name"),
+    kind: SessionKind = Query("auto", description="auto | source | target")
+):
     try:
-        return await account_service.get_session_authorizations(identifier)
+        return await account_service.get_session_authorizations(identifier, kind=kind)
     except SessionNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -1236,20 +1234,12 @@ async def terminate_other_sessions(req: TerminateSessionsRequest):
         return await account_service.terminate_foreign_sessions(
             identifier=req.identifier,
             target_hash=req.target_hash,
-            force=req.force
+            kind=req.kind
         )
     except SessionNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Error terminating sessions for {req.identifier}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/accounts/schedule-terminate", summary="Toggle auto-termination after 24h")
-async def schedule_terminate(req: ScheduleTerminateRequest):
-    try:
-        return account_service.set_scheduled_task(req.identifier, enable=req.enable)
-    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 

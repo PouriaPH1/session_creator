@@ -649,23 +649,6 @@
             <!-- Dynamic banner injected via JS -->
           </div>
 
-          <!-- Auto-Terminate Schedule Card -->
-          <div class="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition">
-            <div class="space-y-0.5 max-w-[80%]">
-              <div class="font-bold text-slate-200 flex items-center gap-1.5">
-                <i class="ph-bold ph-clock-countdown text-indigo-400"></i>
-                لغو خودکار پس از پایان ۲۴ ساعت (Auto-Terminate)
-              </div>
-              <div class="text-[11px] text-slate-400">
-                به محض سپری شدن ۲۴ ساعت، سیستم در پس‌زمینه تمام نشست‌های قبلی/فروشنده را به صورت خودکار حذف می‌کند و فقط سشن‌های سشن‌منیجر حفظ می‌شوند.
-              </div>
-            </div>
-            <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="toggle-schedule-terminate" onchange="toggleScheduleAutoTerminate()" class="sr-only peer">
-              <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-            </label>
-          </div>
-
           <!-- Active Sessions List Header & Stats -->
           <div class="flex items-center justify-between pt-1">
             <div class="font-bold text-slate-300 flex items-center gap-1.5">
@@ -2018,7 +2001,7 @@
               </div>
             </div>
             <div class="flex items-center gap-1 shrink-0">
-              <button onclick="openActiveSessionsModal('${escapeHtml(item.phone || item.filename)}')" title="نشست‌های فعال و امنیت ۲۴h" class="p-1.5 rounded-lg bg-purple-600/15 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 transition flex items-center justify-center">
+              <button onclick="openActiveSessionsModal('${escapeHtml(item.filename)}', 'target')" title="نشست‌های فعال و امنیت ۲۴h" class="p-1.5 rounded-lg bg-purple-600/15 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 transition flex items-center justify-center">
                 <i class="ph-bold ph-shield-check text-xs"></i>
               </button>
               <button onclick="openEditMetadataModal('target', '${escapeHtml(item.filename)}', '${escapeHtml(item.category || '')}', '${escapeHtml(item.remark || '')}')" title="ویرایش دسته‌بندی و ریمارک" class="p-1.5 rounded-lg bg-indigo-600/15 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition flex items-center justify-center">
@@ -2800,11 +2783,13 @@
     // Active Sessions & 24h Security Management
     // =======================================================
     let currentActiveSessionsId = null;
+    let currentActiveSessionsKind = 'auto';
     let currentAuthData = null;
 
-    function openActiveSessionsModal(identifier) {
+    function openActiveSessionsModal(identifier, kind = 'auto') {
       if (!identifier) return;
       currentActiveSessionsId = identifier;
+      currentActiveSessionsKind = kind || 'auto';
       document.getElementById('active-sessions-phone').innerText = identifier;
       document.getElementById('active-sessions-modal').classList.remove('hidden');
       document.getElementById('active-sessions-loading').classList.remove('hidden');
@@ -2816,6 +2801,7 @@
     function closeActiveSessionsModal() {
       document.getElementById('active-sessions-modal').classList.add('hidden');
       currentActiveSessionsId = null;
+      currentActiveSessionsKind = 'auto';
       currentAuthData = null;
     }
 
@@ -2826,7 +2812,7 @@
       document.getElementById('active-sessions-footer').classList.add('hidden');
 
       try {
-        const res = await fetch(`/api/accounts/authorizations?identifier=${encodeURIComponent(identifier)}`);
+        const res = await fetch(`/api/accounts/authorizations?identifier=${encodeURIComponent(identifier)}&kind=${encodeURIComponent(currentActiveSessionsKind)}`);
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.detail || "خطا در دریافت لیست نشست‌ها از تلگرام");
@@ -2849,9 +2835,6 @@
       document.getElementById('badge-our-sessions-count').innerText = `سشن‌های خودمان: ${data.our_sessions_count}`;
       document.getElementById('badge-foreign-sessions-count').innerText = `نشست‌های قبلی/غریبه: ${data.foreign_sessions_count}`;
       
-      const toggle = document.getElementById('toggle-schedule-terminate');
-      if (toggle) toggle.checked = !!data.is_scheduled;
-
       // 24h Security Banner
       const bannerContainer = document.getElementById('security-24h-banner');
       if (data.is_eligible) {
@@ -2885,7 +2868,7 @@
               </div>
               <p class="text-xs text-amber-300/80 leading-relaxed">
                 طبق قوانین رسمی تلگرام، نشست‌های تازه ایجاد شده تا ۲۴ ساعت اجازه لغو سایر نشست‌ها را ندارند. 
-                می‌توانید کلید «لغو خودکار» را روشن کنید تا بلافاصله پس از اتمام ۲۴ ساعت، نشست‌های قبلی حذف شوند.
+                پس از اتمام ۲۴ ساعت، با دکمه حذف نشست‌های قبلی می‌توانید آن‌ها را به صورت دستی لغو کنید.
               </p>
               <div class="space-y-1 pt-1">
                 <div class="flex justify-between text-[10px] text-amber-400/80 font-mono">
@@ -3023,7 +3006,7 @@
         const res = await fetch('/api/accounts/terminate-sessions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: currentActiveSessionsId })
+          body: JSON.stringify({ identifier: currentActiveSessionsId, kind: currentActiveSessionsKind })
         });
         const result = await res.json();
         if (res.ok && result.status === 'success') {
@@ -3052,7 +3035,8 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             identifier: currentActiveSessionsId,
-            target_hash: hashStr
+            target_hash: hashStr,
+            kind: currentActiveSessionsKind
           })
         });
         const result = await res.json();
@@ -3066,32 +3050,6 @@
         }
       } catch (err) {
         alert("خطا در ارتباط: " + err.message);
-      }
-    }
-
-    async function toggleScheduleAutoTerminate() {
-      if (!currentActiveSessionsId) return;
-      const toggle = document.getElementById('toggle-schedule-terminate');
-      const enabled = toggle.checked;
-
-      try {
-        const res = await fetch('/api/accounts/schedule-terminate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            identifier: currentActiveSessionsId,
-            enable: enabled
-          })
-        });
-        const result = await res.json();
-        if (enabled) {
-          alert("✅ زمان‌بندی لغو خودکار فعال شد. به محض پایان ۲۴ ساعت، نشست‌های قبلی به طور خودکار حذف خواهند شد.");
-        } else {
-          alert("لغو خودکار غیرفعال شد.");
-        }
-      } catch (err) {
-        alert("خطا در ثبت زمان‌بندی: " + err.message);
-        toggle.checked = !enabled;
       }
     }
 
