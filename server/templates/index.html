@@ -2681,7 +2681,7 @@
           alert(`نام ${data.total} اکانت با موفقیت به نام‌های طبیعی تغییر یافت!`);
           await loadSourceSessions();
         } else {
-          alert("خطا: " + data.detail);
+          alert("خطا: " + (data.detail || data.message || "خطای نامشخص"));
         }
       } catch (e) {
         alert("خطا: " + e);
@@ -3033,7 +3033,7 @@
           alert(`⏳ ${result.message}`);
           await loadAccountAuthorizations(currentActiveSessionsId);
         } else {
-          alert(`خطا: ${result.message || 'عملیات ناموفق بود'}`);
+          alert(`خطا: ${result.message || result.detail || 'عملیات ناموفق بود'}`);
           await loadAccountAuthorizations(currentActiveSessionsId);
         }
       } catch (err) {
@@ -3062,7 +3062,7 @@
         } else if (result.status === 'forbidden') {
           alert(`⏳ ${result.message}`);
         } else {
-          alert(`خطا: ${result.message || 'عملیات ناموفق بود'}`);
+          alert(`خطا: ${result.message || result.detail || 'عملیات ناموفق بود'}`);
         }
       } catch (err) {
         alert("خطا در ارتباط: " + err.message);
@@ -3980,7 +3980,7 @@
         if (res.ok) {
           checkMigrationStatus();
         } else {
-          alert("خطا: " + data.detail);
+          alert("خطا: " + (data.detail || data.message || "خطای نامشخص"));
         }
       } catch (e) {
         alert("خطا در ارسال درخواست: " + e);
