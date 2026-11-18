@@ -1,17 +1,14 @@
-from fastapi.testclient import TestClient
-from server.main import app
-
-client = TestClient(app)
 
 
-def test_admin_panel_get():
+
+def test_admin_panel_get(client):
     response = client.get("/")
     assert response.status_code == 200
     assert "Telegram Session Manager" in response.text
     assert "text/html" in response.headers["content-type"]
 
 
-def test_stats_endpoint():
+def test_stats_endpoint(client):
     response = client.get("/api/stats")
     assert response.status_code == 200
     data = response.json()
@@ -20,19 +17,19 @@ def test_stats_endpoint():
     assert "status" in data
 
 
-def test_sessions_source_endpoint():
+def test_sessions_source_endpoint(client):
     response = client.get("/api/sessions/source")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
 
-def test_sessions_target_endpoint():
+def test_sessions_target_endpoint(client):
     response = client.get("/api/sessions/target")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
 
-def test_migration_status_endpoint():
+def test_migration_status_endpoint(client):
     response = client.get("/api/migrate/status")
     assert response.status_code == 200
     data = response.json()
@@ -40,7 +37,7 @@ def test_migration_status_endpoint():
     assert "logs" in data
 
 
-def test_delete_all_source_endpoint(tmp_path, monkeypatch):
+def test_delete_all_source_endpoint(tmp_path, monkeypatch, client):
     from config.settings import get_settings
     settings = get_settings()
     test_src = tmp_path / "source"
@@ -56,7 +53,7 @@ def test_delete_all_source_endpoint(tmp_path, monkeypatch):
     assert not dummy_file.exists()
 
 
-def test_delete_faulty_source_endpoint(tmp_path, monkeypatch):
+def test_delete_faulty_source_endpoint(tmp_path, monkeypatch, client):
     from config.settings import get_settings
     settings = get_settings()
     test_src = tmp_path / "source_faulty"
@@ -74,7 +71,7 @@ def test_delete_faulty_source_endpoint(tmp_path, monkeypatch):
     assert not corrupt_file.exists()
 
 
-def test_delete_all_target_endpoint(tmp_path, monkeypatch):
+def test_delete_all_target_endpoint(tmp_path, monkeypatch, client):
     from config.settings import get_settings
     settings = get_settings()
     test_tgt = tmp_path / "target"
@@ -90,7 +87,7 @@ def test_delete_all_target_endpoint(tmp_path, monkeypatch):
     assert not dummy_file.exists()
 
 
-def test_batch_migrate_skip_existing_when_all_exist(tmp_path, monkeypatch):
+def test_batch_migrate_skip_existing_when_all_exist(tmp_path, monkeypatch, client):
     from config.settings import get_settings
     from server.main import pool, migration_manager
     settings = get_settings()
@@ -116,7 +113,7 @@ def test_batch_migrate_skip_existing_when_all_exist(tmp_path, monkeypatch):
     assert data["total_accounts"] == 0
 
 
-def test_passwords_set_and_delete_endpoints():
+def test_passwords_set_and_delete_endpoints(client):
     # Set stored password
     phone = "+989999999999"
     res = client.post("/api/accounts/passwords/set", json={
@@ -145,7 +142,7 @@ def test_passwords_set_and_delete_endpoints():
     assert phone not in res_after.json()
 
 
-def test_migrate_provide_and_skip_2fa_endpoints():
+def test_migrate_provide_and_skip_2fa_endpoints(client):
     from server.main import migration_manager
     import asyncio
 
@@ -178,7 +175,7 @@ def test_migrate_provide_and_skip_2fa_endpoints():
     client.delete("/api/accounts/passwords/+989999999999")
 
 
-def test_login_api_invalid_requests():
+def test_login_api_invalid_requests(client):
     # Invalid phone format
     res = client.post("/api/sessions/login/send-code", json={"phone": "123"})
     assert res.status_code == 400

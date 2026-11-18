@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     server_host: str = "0.0.0.0"
     server_port: int = 8000
     server_url: str = "http://127.0.0.1:8000"
+    # Remote credentials require HTTPS. Loopback/SSH tunnels work over HTTP.
+    admin_allow_insecure_http: bool = False
+    worker_api_token: str = ""
 
     # Directory Paths
     base_dir: Path = Path(__file__).resolve().parent.parent

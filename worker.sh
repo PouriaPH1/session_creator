@@ -54,7 +54,9 @@ else
 fi
 
 # Determine port and resolve Master URL
-if [[ "$CLEAN_HOST" =~ :[0-9]+$ ]]; then
+if [[ "$PROTOCOL" = "https://" ]]; then
+    MASTER_URL="${PROTOCOL}${CLEAN_HOST}"
+elif [[ "$CLEAN_HOST" =~ :[0-9]+$ ]]; then
     MASTER_URL="${PROTOCOL}${CLEAN_HOST}"
 else
     DEFAULT_PORT=8000
@@ -124,10 +126,25 @@ fi
 source venv/bin/activate
 pip install -r requirements.txt -q
 
-# 6. Auto-Fetch Telegram API Credentials from Master Server (Zero-Prompt)
+# The worker token is separate from the administrator password.
+MASTER_URL="$MASTER_URL" python -c 'import os; from worker.otp_client import require_secure_master_url; require_secure_master_url(os.environ["MASTER_URL"])'
+if [ -z "${WORKER_API_TOKEN:-}" ] && [ -f ".env" ]; then
+    WORKER_API_TOKEN=$(grep -E '^WORKER_API_TOKEN=' .env | cut -d '=' -f 2- | tr -d '\r' || true)
+fi
+if [ -z "${WORKER_API_TOKEN:-}" ]; then
+    read -r -s -p "🔑 توکن worker را از تنظیمات ورود پنل وارد کنید: " WORKER_API_TOKEN
+    echo ""
+fi
+if [[ ! "$WORKER_API_TOKEN" =~ ^[A-Za-z0-9_-]{32,256}$ ]]; then
+    echo "Worker token is required. Generate it in the authenticated panel."
+    exit 1
+fi
+export WORKER_API_TOKEN
+
+# 6. Fetch Telegram API Credentials using the scoped worker token.
 if [ ! -f ".env" ]; then
     echo -e "${BLUE}⚙️ دریافت خودکار تنظیمات API تلگرام از سرور اول...${NC}"
-    REMOTE_CFG=$(curl -s -m 4 "$MASTER_URL/api/config/telegram" 2>/dev/null || true)
+    REMOTE_CFG=$(printf 'Authorization: Bearer %s\n' "$WORKER_API_TOKEN" | curl -s -m 4 --header @- "$MASTER_URL/api/config/telegram" 2>/dev/null || true)
     REMOTE_API_ID=$(echo "$REMOTE_CFG" | grep -oE '"api_id":[0-9]+' | cut -d':' -f2 || true)
     REMOTE_API_HASH=$(echo "$REMOTE_CFG" | grep -oE '"api_hash":"[^"]+' | cut -d'"' -f4 || true)
 

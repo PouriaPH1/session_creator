@@ -18,6 +18,8 @@ from config.settings import get_settings
 from core.exceptions import OTPNotFoundError, SessionNotFoundError
 from core.telethon_patch import apply_telethon_patches
 from server.account_service import AccountManagementService
+from server.auth import AdminAuthMiddleware, router as auth_router
+from server.auth_service import AuthService
 from server.chat_service import ChatService
 from server.login_service import TelegramLoginService
 from server.metadata_service import MetadataService
@@ -72,6 +74,10 @@ app = FastAPI(
     version="1.1.0",
     lifespan=lifespan
 )
+app.state.auth = AuthService(settings.base_dir / "storage" / "admin_auth.sqlite3")
+app.state.auth_allow_http = settings.admin_allow_insecure_http
+app.add_middleware(AdminAuthMiddleware)
+app.include_router(auth_router)
 
 # Path to Dashboard HTML
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -260,10 +266,7 @@ async def get_stats():
 
 @app.get("/health", summary="Check health and pool status")
 async def health_check():
-    return {
-        "status": "healthy",
-        "active_sessions_count": len(pool.list_sessions())
-    }
+    return {"status": "healthy"}
 
 
 @app.get("/api/config/telegram", summary="Get Telegram API ID/Hash for workers")

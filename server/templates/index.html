@@ -56,6 +56,8 @@
           <i class="ph-bold ph-arrows-clockwise text-sm"></i>
           بارگذاری مجدد
         </button>
+        <button onclick="openAdminSettings()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700">تنظیمات ورود</button>
+        <button onclick="logoutAdmin()" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-300 border border-rose-500/30">خروج</button>
         <a href="/docs" target="_blank" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 transition-all border border-indigo-500/30 flex items-center gap-1.5">
           <i class="ph-bold ph-book-open-text text-sm"></i>
           مستندات API
@@ -63,6 +65,24 @@
       </div>
     </div>
   </header>
+
+  <dialog id="admin-settings" class="bg-slate-900 text-slate-100 rounded-2xl border border-slate-700 p-6 w-full max-w-md backdrop:bg-black/70">
+    <form id="admin-credentials-form" class="space-y-4">
+      <div class="flex items-center justify-between"><h2 class="font-bold">تنظیمات ورود مدیر</h2><button type="button" onclick="document.getElementById('admin-settings').close()" aria-label="بستن">✕</button></div>
+      <label class="block text-sm">نام کاربری<input id="admin-username" autocomplete="username" minlength="3" maxlength="64" required dir="ltr" class="block mt-2 w-full bg-slate-950 rounded-lg border border-slate-700 p-2.5"></label>
+      <label class="block text-sm">رمز فعلی<input id="admin-current-password" type="password" autocomplete="current-password" maxlength="256" required dir="ltr" class="block mt-2 w-full bg-slate-950 rounded-lg border border-slate-700 p-2.5"></label>
+      <label class="block text-sm">رمز جدید، حداقل ۱۲ نویسه<input id="admin-new-password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required dir="ltr" class="block mt-2 w-full bg-slate-950 rounded-lg border border-slate-700 p-2.5"></label>
+      <label class="block text-sm">تکرار رمز جدید<input id="admin-confirm-password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required dir="ltr" class="block mt-2 w-full bg-slate-950 rounded-lg border border-slate-700 p-2.5"></label>
+      <p class="text-xs text-slate-400">با ذخیره، تمام نشست‌های ورود و توکن worker قبلی باطل می‌شوند و باید دوباره وارد شوید.</p>
+      <p id="admin-settings-error" role="alert" class="text-sm text-rose-300"></p>
+      <button type="submit" class="w-full rounded-lg bg-indigo-600 p-2.5 font-semibold">ذخیره و ورود مجدد</button>
+    </form>
+    <div class="mt-6 pt-4 border-t border-slate-700 space-y-3">
+      <p class="text-sm">توکن worker فقط برای دریافت کد ورود و تنظیمات لازم مهاجرت دسترسی دارد.</p>
+      <button type="button" onclick="generateWorkerToken()" class="rounded-lg bg-slate-800 p-2.5 text-sm">ساخت توکن جدید worker</button>
+      <label id="admin-worker-token-label" hidden class="block text-xs">توکن فقط همین بار نمایش داده می‌شود. آن را در WORKER_API_TOKEN روی worker ذخیره کنید.<input id="admin-worker-token" readonly dir="ltr" class="block mt-2 w-full rounded-lg bg-slate-950 p-2.5 text-sm" onclick="this.select()"></label>
+    </div>
+  </dialog>
 
   <!-- Main Container -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -1449,6 +1469,85 @@
   </div>
 
   <script>
+    // Every existing fetch uses the current authenticated session and CSRF token.
+    const nativeFetch = window.fetch.bind(window);
+    let csrfToken = '';
+    let adminUsername = '';
+    const authReady = nativeFetch('/api/auth/me', { credentials: 'same-origin' }).then(async (response) => {
+      if (!response.ok) {
+        location.replace('/login');
+        throw new Error('نشست ورود منقضی شده است.');
+      }
+      const data = await response.json();
+      csrfToken = data.csrf_token;
+      adminUsername = data.username;
+    });
+    window.fetch = async function(input, options = {}) {
+      const url = new URL(input instanceof Request ? input.url : input, location.href);
+      if (url.origin !== location.origin) return nativeFetch(input, options);
+      await authReady;
+      const method = (options.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      const headers = new Headers(options.headers || (input instanceof Request ? input.headers : undefined));
+      if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) headers.set('X-CSRF-Token', csrfToken);
+      const response = await nativeFetch(input, { ...options, headers, credentials: 'same-origin' });
+      if (response.status === 401) location.replace('/login');
+      return response;
+    };
+
+    async function openAdminSettings() {
+      await authReady;
+      document.getElementById('admin-credentials-form').reset();
+      document.getElementById('admin-username').value = adminUsername;
+      document.getElementById('admin-settings-error').textContent = '';
+      document.getElementById('admin-worker-token').value = '';
+      document.getElementById('admin-worker-token-label').hidden = true;
+      document.getElementById('admin-settings').showModal();
+    }
+
+    async function logoutAdmin() {
+      const response = await fetch('/api/auth/logout', { method: 'POST' });
+      if (response.ok) location.replace('/login');
+    }
+
+    document.getElementById('admin-credentials-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const error = document.getElementById('admin-settings-error');
+      const password = document.getElementById('admin-new-password').value;
+      if (password !== document.getElementById('admin-confirm-password').value) {
+        error.textContent = 'رمز جدید و تکرار آن یکسان نیستند.';
+        return;
+      }
+      const button = event.submitter;
+      button.disabled = true;
+      try {
+        const response = await fetch('/api/auth/credentials', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: document.getElementById('admin-username').value.trim(),
+            current_password: document.getElementById('admin-current-password').value, password })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'اطلاعات واردشده معتبر نیست.');
+        location.replace('/login');
+      } catch (failure) {
+        error.textContent = failure.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    async function generateWorkerToken() {
+      if (!confirm('توکن worker قبلی باطل می‌شود. توکن جدید ساخته شود؟')) return;
+      try {
+        const response = await fetch('/api/auth/worker-token', { method: 'POST' });
+        if (!response.ok) throw new Error('ساخت توکن انجام نشد. دوباره تلاش کنید.');
+        const data = await response.json();
+        document.getElementById('admin-worker-token').value = data.token;
+        document.getElementById('admin-worker-token-label').hidden = false;
+      } catch (failure) {
+        document.getElementById('admin-settings-error').textContent = failure.message;
+      }
+    }
+
     function escapeHtml(text) {
       if (text === null || text === undefined) return '';
       return String(text)

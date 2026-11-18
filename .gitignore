@@ -23,6 +23,7 @@ storage/active_port.txt
 !storage/source_sessions/.gitkeep
 !storage/target_sessions/.gitkeep
 PANEL_CREDENTIALS.txt
+storage/admin_auth.sqlite3*
 
 # Session archives and extracted data
 sessions/

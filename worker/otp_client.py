@@ -1,7 +1,9 @@
 import asyncio
 import logging
 import time
+import ipaddress
 from typing import Optional
+from urllib.parse import urlsplit
 import httpx
 
 from core.exceptions import MasterServerError, OTPTimeoutError
@@ -10,13 +12,28 @@ from core.interfaces import IOTPClient
 logger = logging.getLogger(__name__)
 
 
+def require_secure_master_url(base_url: str):
+    url = urlsplit(base_url)
+    if url.scheme == "https" and url.hostname and not url.username and not url.password:
+        return
+    is_loopback = url.hostname == "localhost"
+    try:
+        is_loopback = is_loopback or ipaddress.ip_address(url.hostname or "").is_loopback
+    except ValueError:
+        pass
+    if url.scheme != "http" or not is_loopback or url.username or url.password:
+        raise MasterServerError("Use HTTPS or an HTTP loopback SSH tunnel for the master server.")
+
+
 class HttpOTPClient(IOTPClient):
     """
     HTTP client for querying the Master OTP server with retry & polling logic.
     """
 
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, api_token: Optional[str] = None):
+        require_secure_master_url(base_url)
         self.base_url = base_url.rstrip("/")
+        self.headers = {"Authorization": f"Bearer {api_token}"} if api_token else {}
 
     async def fetch_otp(
         self,
@@ -35,7 +52,7 @@ class HttpOTPClient(IOTPClient):
         start_time = time.time()
         logger.info(f"Polling Master server for OTP on {clean_phone} (Timeout: {timeout}s)...")
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, headers=self.headers) as client:
             while (time.time() - start_time) < timeout:
                 try:
                     response = await client.get(endpoint, params=params)
@@ -44,9 +61,13 @@ class HttpOTPClient(IOTPClient):
                         data = response.json()
                         code = data.get("code")
                         if code:
-                            logger.info(f"OTP received for {clean_phone}: {code}")
+                            logger.info(f"OTP received for {clean_phone}")
                             return code
 
+                    elif response.status_code in (401, 403, 426):
+                        raise MasterServerError(
+                            "Master denied access. Configure WORKER_API_TOKEN and use HTTPS or an SSH tunnel."
+                        )
                     elif response.status_code == 404:
                         # 404 means either session not found or code not arrived yet
                         detail = response.json().get("detail", "")

@@ -62,7 +62,7 @@ class TelethonOTPService(IOTPService):
                 code_match = CONTEXTUAL_OTP_REGEX.search(err_text)
                 if code_match:
                     code = code_match.group(1)
-                    logger.info(f"Extracted OTP {code} from error context for {identifier}")
+                    logger.info(f"Extracted OTP from error context for {identifier}")
                     return code, datetime.now(timezone.utc).timestamp()
 
                 logger.error(f"Error fetching messages from Telegram service for {identifier}: {e}")
@@ -80,7 +80,7 @@ class TelethonOTPService(IOTPService):
 
             code = self._extract_code(msg.message)
             if code:
-                logger.info(f"Successfully extracted OTP {code} for {identifier}")
+                logger.info(f"Successfully extracted OTP for {identifier}")
                 return code, msg_time
 
         return None

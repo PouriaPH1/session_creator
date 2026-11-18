@@ -1,10 +1,9 @@
 import pytest
 from pathlib import Path
-from fastapi.testclient import TestClient
 
 from config.settings import Settings
 from server.metadata_service import MetadataService
-from server.main import app, metadata_service
+from server.main import metadata_service
 
 
 @pytest.fixture
@@ -85,8 +84,8 @@ def test_fallback_to_passwords_notes(temp_settings):
     assert meta["category"] == ""
 
 
-def test_api_categories_and_metadata_endpoints():
-    client = TestClient(app)
+def test_api_categories_and_metadata_endpoints(client):
+
 
     # 1. Update source metadata
     res = client.post("/api/sessions/source/metadata", json={
@@ -138,7 +137,7 @@ def test_api_categories_and_metadata_endpoints():
     assert batch_tgt.json()["updated_count"] == 2
 
 
-def test_download_target_zip_with_filters():
+def test_download_target_zip_with_filters(client):
     import io
     import zipfile
     from server.main import settings
@@ -152,7 +151,7 @@ def test_download_target_zip_with_filters():
     t3 = settings.target_sessions_dir / "target_nocat.session"
     t3.write_bytes(b"dummy session data 3")
 
-    client = TestClient(app)
+
     client.post("/api/sessions/target/metadata", json={
         "filename": "target_cat_a.session",
         "category": "CategoryA",

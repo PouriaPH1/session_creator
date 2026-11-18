@@ -17,7 +17,7 @@ REQUIREMENTS="requirements.txt"
 # Tracked files that the app rewrites at runtime: kept as they are on the server.
 RUNTIME_FILES=()
 # Optional local URL that must answer 2xx after the restart (empty = skip).
-HEALTH_URL="http://127.0.0.1:8000/"
+HEALTH_URL="http://127.0.0.1:8000/health"
 # Seconds the service must stay up (same PID) to count as healthy.
 SETTLE=20
 

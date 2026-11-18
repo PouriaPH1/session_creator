@@ -1,13 +1,10 @@
 import datetime
 from unittest.mock import AsyncMock, MagicMock
 import pytest
-from fastapi.testclient import TestClient
 
 from config.settings import Settings
 from server.account_service import AccountManagementService
-from server.main import app
 
-client = TestClient(app)
 
 
 def create_mock_authorization(
@@ -163,7 +160,7 @@ async def test_terminate_foreign_sessions_guard_and_execution(tmp_path):
     assert res_success["preserved_count"] == 1
 
 
-def test_api_authorizations_not_found():
+def test_api_authorizations_not_found(client):
     res = client.get("/api/accounts/authorizations?identifier=non_existent_session_12345")
     assert res.status_code == 404
 
@@ -351,7 +348,7 @@ async def test_target_kind_uses_target_file_not_pool_and_disconnects(tmp_path):
     assert state["connected"] is False
 
 
-def test_no_background_auto_termination():
+def test_no_background_auto_termination(client):
     from server.main import account_service
     assert not hasattr(account_service, "start_auto_terminator_loop")
     assert not hasattr(account_service, "run_scheduled_auto_terminations")

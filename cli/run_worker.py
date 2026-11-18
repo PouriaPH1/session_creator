@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import httpx
 
 from config.settings import get_settings
-from worker.otp_client import HttpOTPClient
+from worker.otp_client import HttpOTPClient, require_secure_master_url
 from worker.session_creator import TelegramSessionCreator
 
 logging.basicConfig(
@@ -96,6 +96,8 @@ async def async_main():
     )
 
     args = parser.parse_args()
+    require_secure_master_url(args.server_url)
+    headers = {"Authorization": f"Bearer {settings.worker_api_token}"} if settings.worker_api_token else {}
 
     # Apply override delay if provided
     settings.batch_sleep_delay = args.delay
@@ -103,7 +105,7 @@ async def async_main():
     # If local credentials are still default placeholders, fetch from Master Server
     if settings.api_id == 12345678 or settings.api_hash == "your_api_hash_here":
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=5.0, headers=headers) as client:
                 cfg_res = await client.get(f"{args.server_url.rstrip('/')}/api/config/telegram")
                 if cfg_res.status_code == 200:
                     cfg_data = cfg_res.json()
@@ -117,7 +119,7 @@ async def async_main():
             logger.debug(f"Could not auto-fetch Telegram credentials from master: {e}")
 
     proxy_cfg = parse_proxy(args.proxy) if args.proxy else None
-    otp_client = HttpOTPClient(base_url=args.server_url)
+    otp_client = HttpOTPClient(base_url=args.server_url, api_token=settings.worker_api_token)
     creator = TelegramSessionCreator(
         settings=settings,
         otp_client=otp_client,
@@ -152,7 +154,7 @@ async def async_main():
 
     elif args.all:
         logger.info(f"Querying Master Server ({args.server_url}) for all active sessions...")
-        async with httpx.AsyncClient(timeout=10.0) as http:
+        async with httpx.AsyncClient(timeout=10.0, headers=headers) as http:
             try:
                 res = await http.get(f"{args.server_url.rstrip('/')}/sessions")
                 if res.status_code != 200:

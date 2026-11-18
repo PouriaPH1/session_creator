@@ -1,8 +1,5 @@
-from fastapi.testclient import TestClient
 from server.account_service import AccountManagementService
-from server.main import app
 
-client = TestClient(app)
 
 
 def test_generate_secure_password():
@@ -16,20 +13,20 @@ def test_generate_secure_password():
     assert pwd1 != pwd2
 
 
-def test_passwords_api():
+def test_passwords_api(client):
     response = client.get("/api/accounts/passwords")
     assert response.status_code == 200
     assert isinstance(response.json(), dict)
 
 
-def test_passwords_export_csv_api():
+def test_passwords_export_csv_api(client):
     response = client.get("/api/accounts/passwords/export-csv")
     assert response.status_code == 200
     assert "text/csv" in response.headers["content-type"]
     assert "Phone / Identifier" in response.text
 
 
-def test_passwords_import_csv_api():
+def test_passwords_import_csv_api(client):
     sample_csv = "Phone / Identifier,2FA Password,Note\n+989123456789,TestSecret2FA!,ManualTest\n"
     response = client.post(
         "/api/accounts/passwords/import-csv",

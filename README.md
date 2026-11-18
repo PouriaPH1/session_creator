@@ -110,12 +110,19 @@ docker compose up -d
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
+python -m cli.admin_auth
 python run_server.py
 ```
 
 ---
 
 ## 🚀 راهنمای اجرا
+
+ورود به پنل و APIها به احراز هویت نیاز دارد. اولین مدیر را با `python -m cli.admin_auth` روی سرور تنظیم کنید. برای بازیابی دسترسی از `python -m cli.admin_auth --reset` استفاده کنید. رمز به‌صورت هش در `storage/admin_auth.sqlite3` ذخیره می‌شود. این فایل باید در فضای پایدار و خارج از Git نگهداری شود.
+
+پس از ورود، از «تنظیمات ورود» نام کاربری و رمز را تغییر دهید. تغییر مشخصات ورود، تمام نشست‌های قبلی و توکن worker را باطل می‌کند. دسترسی شبکه‌ای به HTTPS نیاز دارد. برای استفادهٔ محلی یا تونل SSH می‌توان از HTTP روی loopback استفاده کرد.
+
+در «تنظیمات ورود» توکن worker بسازید و آن را در متغیر `WORKER_API_TOKEN` روی worker ذخیره کنید. این توکن فقط اجازهٔ خواندن فهرست سشن‌ها، تنظیمات API تلگرام و کد ورود را دارد. مسیرهای مدیریت و دانلود فایل به ورود مدیر نیاز دارند. مسیر `/health` فقط وضعیت عمومی سرویس را برمی‌گرداند.
 
 ### گام اول: اجرای سرور مبدأ (Master OTP Server)
 

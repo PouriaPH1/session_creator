@@ -35,6 +35,8 @@ if not exist ".env" (
 )
 
 :: Start Server with automatic free port detection and browser launcher
+python -m cli.admin_auth
+if errorlevel 1 exit /b 1
 echo [INFO] Starting Master Server with dynamic free port detection...
 python run_server.py --open-browser
 

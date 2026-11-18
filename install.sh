@@ -80,6 +80,8 @@ if [ "$PORT" != "$RAW_PORT" ]; then
     sed -i "s|^SERVER_URL=.*|SERVER_URL=http://127.0.0.1:$PORT|" .env
 fi
 
+./venv/bin/python -m cli.admin_auth
+
 echo -e "${BLUE}🛡️ [4/6] Configuring firewall (Opening port $PORT)...${NC}"
 if command -v ufw >/dev/null 2>&1; then
     sudo ufw allow "$PORT"/tcp >/dev/null 2>&1 || true
