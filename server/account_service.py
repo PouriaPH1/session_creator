@@ -77,6 +77,7 @@ class AccountManagementService:
         self.passwords_file.parent.mkdir(parents=True, exist_ok=True)
         if not self.passwords_file.exists():
             self.passwords_file.write_text("{}", encoding="utf-8")
+        self.passwords_file.chmod(0o600)
 
     def _load_passwords(self) -> Dict[str, Dict[str, Any]]:
         try:
@@ -114,7 +115,7 @@ class AccountManagementService:
         return {
             "status": "success",
             "identifier": identifier,
-            "password": password
+            "has_2fa": True
         }
 
     def delete_stored_password(self, identifier: str) -> Dict[str, Any]:
@@ -229,7 +230,7 @@ class AccountManagementService:
 
         try:
             await client.edit_2fa(
-                current_password=current_password if current_password else None,
+                current_password=current_password or self.get_password(identifier),
                 new_password=new_password,
                 hint=hint
             )
@@ -239,7 +240,7 @@ class AccountManagementService:
             return {
                 "status": "success",
                 "identifier": identifier,
-                "password": new_password
+                "has_2fa": True
             }
         except PasswordHashInvalidError:
             raise AuthenticationFailedError("Current 2FA password provided is incorrect.")
@@ -347,7 +348,7 @@ class AccountManagementService:
                     results.append({
                         "identifier": ident,
                         "success": True,
-                        "password": new_pass
+                        "has_2fa": True
                     })
                     logger.info(f"[{idx}/{len(target_items)}] Successfully set random 2FA on Telegram for {ident}")
 
@@ -367,7 +368,7 @@ class AccountManagementService:
                 results.append({
                     "identifier": ident,
                     "success": True,
-                    "password": new_pass
+                    "has_2fa": True
                 })
                 logger.info(f"[{idx}/{len(target_items)}] Generated random 2FA for storage: {ident}")
 
@@ -847,23 +848,6 @@ class AccountManagementService:
                 "status": "error",
                 "response": str(e)
             }
-
-    def export_passwords_csv(self) -> str:
-        """Exports all saved passwords as a CSV string."""
-        passwords = self._load_passwords()
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow(["Phone / Identifier", "2FA Password", "Note", "Updated At"])
-
-        for phone, info in passwords.items():
-            writer.writerow([
-                phone,
-                info.get("password", ""),
-                info.get("note", ""),
-                info.get("updated_at", "")
-            ])
-
-        return output.getvalue()
 
     def import_passwords_csv(self, csv_content: str) -> int:
         """

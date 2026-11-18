@@ -15,15 +15,12 @@ def test_generate_secure_password():
 
 def test_passwords_api(client):
     response = client.get("/api/accounts/passwords")
-    assert response.status_code == 200
-    assert isinstance(response.json(), dict)
+    assert response.status_code == 404
 
 
 def test_passwords_export_csv_api(client):
     response = client.get("/api/accounts/passwords/export-csv")
-    assert response.status_code == 200
-    assert "text/csv" in response.headers["content-type"]
-    assert "Phone / Identifier" in response.text
+    assert response.status_code in (404, 405)
 
 
 def test_passwords_import_csv_api(client):
@@ -37,8 +34,7 @@ def test_passwords_import_csv_api(client):
     assert data["status"] == "success"
     assert data["imported_count"] >= 1
 
-    # Check that it appears in get passwords
-    res2 = client.get("/api/accounts/passwords")
-    assert "+989123456789" in res2.json()
-    assert res2.json()["+989123456789"]["password"] == "TestSecret2FA!"
+    res2 = client.get("/api/accounts/password-status", params={"identifier": "+989123456789"})
+    assert res2.json() == {"has_2fa": True}
+    assert "TestSecret2FA!" not in res2.text
 

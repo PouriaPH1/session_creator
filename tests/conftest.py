@@ -14,7 +14,12 @@ def auth_service(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def client(auth_service):
+def client(auth_service, tmp_path, monkeypatch):
+    from server.main import account_service, metadata_service
+    password_file = tmp_path / "passwords.json"
+    password_file.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(account_service, "passwords_file", password_file)
+    monkeypatch.setattr(metadata_service, "passwords_file", password_file)
     client = TestClient(app, base_url="https://testserver")
     response = client.post("/api/auth/login", json={
         "username": "administrator", "password": "Strong-test-password-123"

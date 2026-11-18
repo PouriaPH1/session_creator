@@ -124,22 +124,21 @@ def test_passwords_set_and_delete_endpoints(client):
     assert res.status_code == 200
     data = res.json()
     assert data["status"] == "success"
-    assert data["password"] == "MySecret2FA123!"
+    assert data["has_2fa"] is True
+    assert "MySecret2FA123!" not in res.text
 
     # Verify in passwords list
-    res_list = client.get("/api/accounts/passwords")
+    res_list = client.get("/api/accounts/password-status", params={"identifier": phone})
     assert res_list.status_code == 200
-    passwords = res_list.json()
-    assert phone in passwords
-    assert passwords[phone]["password"] == "MySecret2FA123!"
+    assert res_list.json() == {"has_2fa": True}
 
     # Delete password
     res_del = client.delete(f"/api/accounts/passwords/{phone}")
     assert res_del.status_code == 200
 
     # Verify deleted
-    res_after = client.get("/api/accounts/passwords")
-    assert phone not in res_after.json()
+    res_after = client.get("/api/accounts/password-status", params={"identifier": phone})
+    assert res_after.json() == {"has_2fa": False}
 
 
 def test_migrate_provide_and_skip_2fa_endpoints(client):

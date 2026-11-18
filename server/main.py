@@ -290,19 +290,11 @@ async def list_sessions():
 @app.get("/api/sessions/source", summary="List detailed source sessions")
 async def list_source_sessions():
     sessions = pool.get_detailed_sessions()
-    passwords = account_service.get_all_passwords()
     for s in sessions:
-        phone = s.get("phone") or s.get("session_name") or ""
-        clean_phone = phone.strip().replace(" ", "")
-        pwd = None
-        for k in [clean_phone, clean_phone.lstrip("+"), f"+{clean_phone.lstrip('+')}"]:
-            if k in passwords:
-                item = passwords[k]
-                pwd = item.get("password") if isinstance(item, dict) else item
-                if pwd:
-                    break
-        s["has_2fa"] = bool(pwd)
-        s["saved_2fa"] = pwd or ""
+        s["has_2fa"] = bool(
+            account_service.get_password(s.get("phone") or "")
+            or account_service.get_password(s.get("session_name") or "")
+        )
     return sessions
 
 
@@ -1154,20 +1146,9 @@ async def batch_random_2fa(req: BatchRandom2FARequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/accounts/passwords", summary="List stored 2FA passwords")
-async def list_passwords():
-    return account_service.get_all_passwords()
-
-
-@app.get("/api/accounts/passwords/export-csv", summary="Export passwords as CSV")
-async def export_passwords_csv():
-    csv_data = account_service.export_passwords_csv()
-    filename = f"telegram_2fa_passwords_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    return Response(
-        content=csv_data,
-        media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
+@app.get("/api/accounts/password-status", summary="Check whether an account has a stored 2FA password")
+async def password_status(identifier: str = Query(..., min_length=1, max_length=128)):
+    return {"has_2fa": bool(account_service.get_password(identifier))}
 
 
 @app.post("/api/accounts/passwords/import-csv", summary="Import 2FA passwords from CSV")
